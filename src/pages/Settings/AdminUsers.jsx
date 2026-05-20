@@ -83,12 +83,38 @@ export default function AdminUsers({ adminEmail }) {
     }
   };
 
-  const handleDeploy = () => {
-    setDialogConfig({
-      title: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Rocket size={20} color="var(--accent)" /> Conferma pubblicazione</span>,
-      message: 'Stai per avviare un nuovo build su Vercel. L\'app pubblica verrà aggiornata in pochi minuti. Vuoi procedere?',
-      onConfirm: handleConfirmDeploy
-    });
+  const handleDeploy = async () => {
+    setDeploying(true);
+    try {
+      const res = await fetch('/api/deploy-status');
+      if (!res.ok) throw new Error("Funziona solo dal localhost.");
+      const data = await res.json();
+
+      const filesList = data.files && data.files.length > 0
+        ? data.files.map((f, i) => <div key={i} style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--text-2)', background: 'var(--bg)', padding: '4px 8px', borderRadius: 4, marginBottom: 4 }}>{f}</div>)
+        : <p style={{ fontSize: 14, color: 'var(--text-2)' }}>Nessuna modifica rilevata. Verrà pubblicato il codice attuale.</p>;
+
+      setDialogConfig({
+        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Rocket size={20} color="var(--accent)" /> Conferma pubblicazione</span>,
+        message: (
+          <div>
+            <p style={{ marginBottom: 16 }}>Stai per pubblicare l'app su Vercel. Ecco i file modificati:</p>
+            <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
+              {filesList}
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Vuoi procedere con il caricamento online?</p>
+          </div>
+        ),
+        onConfirm: handleConfirmDeploy
+      });
+    } catch (err) {
+      setDialogConfig({
+        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore</span>,
+        message: err.message
+      });
+    } finally {
+      setDeploying(false);
+    }
   };
 
   const executeResetDatabase = async () => {
