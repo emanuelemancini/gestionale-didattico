@@ -87,7 +87,8 @@ export default function AdminUsers({ adminEmail }) {
     setDeploying(true);
     try {
       const res = await fetch('/api/deploy-status');
-      if (!res.ok) throw new Error("Funziona solo dal localhost.");
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) throw new Error("Il deploy può essere avviato solo dall'app in locale (localhost).");
       const data = await res.json();
 
       const filesList = data.files && data.files.length > 0
