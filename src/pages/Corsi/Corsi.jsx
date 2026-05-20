@@ -7,9 +7,78 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Link } from 'react-router-dom';
-import { BookOpen, Users, Search, ChevronRight, MoreVertical, Edit2, Trash2, Archive } from 'lucide-react';
+import {
+  BookOpen, Users, Search, ChevronRight, MoreVertical, Edit2, Trash2, Archive,
+  Book, GraduationCap, Palette, PenTool, Camera, Monitor, Music, Globe,
+  Calculator, Layers, Image, Video, Code, Microscope, Brush, Film,
+  Feather, Layout, Aperture, Type, Cpu, Lightbulb, Headphones,
+  Pen, Star, Map, Compass, Ruler, BookMarked
+} from 'lucide-react';
 
 import { courseColor as corsoColor } from '../../utils/colors';
+
+const CORSO_COLORS = [
+  { bg: '#fce7f3', fg: '#ec4899' }, // Pink
+  { bg: '#ffe4e6', fg: '#f43f5e' }, // Rose
+  { bg: '#fee2e2', fg: '#ef4444' }, // Red
+  { bg: '#ffedd5', fg: '#f97316' }, // Orange
+  { bg: '#fef3c7', fg: '#d97706' }, // Amber
+  { bg: '#fef9c3', fg: '#ca8a04' }, // Yellow
+  { bg: '#ecfccb', fg: '#65a30d' }, // Lime
+  { bg: '#dcfce7', fg: '#16a34a' }, // Green
+  { bg: '#d1fae5', fg: '#059669' }, // Emerald
+  { bg: '#ccfbf1', fg: '#0d9488' }, // Teal
+  { bg: '#cffafe', fg: '#0891b2' }, // Cyan
+  { bg: '#e0f2fe', fg: '#0284c7' }, // Sky
+  { bg: '#dbeafe', fg: '#2563eb' }, // Blue
+  { bg: '#e0e7ff', fg: '#6366f1' }, // Indigo
+  { bg: '#ede9fe', fg: '#7c3aed' }, // Violet
+  { bg: '#f3e8ff', fg: '#9333ea' }, // Purple
+  { bg: '#fae8ff', fg: '#c026d3' }, // Fuchsia
+  { bg: '#f5f5f4', fg: '#78716c' }, // Warm gray
+  { bg: '#f1f5f9', fg: '#475569' }, // Slate
+  { bg: '#1e293b', fg: '#e2e8f0' }, // Dark
+];
+
+const CORSO_ICONS = [
+  { name: 'BookOpen', comp: BookOpen },
+  { name: 'Book', comp: Book },
+  { name: 'BookMarked', comp: BookMarked },
+  { name: 'GraduationCap', comp: GraduationCap },
+  { name: 'Pen', comp: Pen },
+  { name: 'PenTool', comp: PenTool },
+  { name: 'Feather', comp: Feather },
+  { name: 'Type', comp: Type },
+  { name: 'Palette', comp: Palette },
+  { name: 'Brush', comp: Brush },
+  { name: 'Camera', comp: Camera },
+  { name: 'Aperture', comp: Aperture },
+  { name: 'Film', comp: Film },
+  { name: 'Image', comp: Image },
+  { name: 'Video', comp: Video },
+  { name: 'Monitor', comp: Monitor },
+  { name: 'Code', comp: Code },
+  { name: 'Cpu', comp: Cpu },
+  { name: 'Calculator', comp: Calculator },
+  { name: 'Ruler', comp: Ruler },
+  { name: 'Microscope', comp: Microscope },
+  { name: 'Compass', comp: Compass },
+  { name: 'Map', comp: Map },
+  { name: 'Globe', comp: Globe },
+  { name: 'Music', comp: Music },
+  { name: 'Headphones', comp: Headphones },
+  { name: 'Layers', comp: Layers },
+  { name: 'Layout', comp: Layout },
+  { name: 'Star', comp: Star },
+  { name: 'Lightbulb', comp: Lightbulb },
+];
+
+const DEFAULT_COLOR = CORSO_COLORS[0];
+const DEFAULT_ICON = 'BookOpen';
+
+function getIconComp(name) {
+  return CORSO_ICONS.find(i => i.name === name)?.comp || BookOpen;
+}
 
 export default function Corsi() {
   const { user } = useAuth();
@@ -22,7 +91,7 @@ export default function Corsi() {
   const [editCorso, setEditCorso] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [menuOpen, setMenuOpen] = useState(null);
-  const [form, setForm] = useState({ nomeCorso: '', descrizione: '' });
+  const [form, setForm] = useState({ nomeCorso: '', descrizione: '', colore: DEFAULT_COLOR, icona: DEFAULT_ICON });
   const [saving, setSaving] = useState(false);
   const menuRef = useRef();
 
@@ -57,13 +126,18 @@ export default function Corsi() {
 
   const openCreate = () => {
     setEditCorso(null);
-    setForm({ nomeCorso: '', descrizione: '' });
+    setForm({ nomeCorso: '', descrizione: '', colore: DEFAULT_COLOR, icona: DEFAULT_ICON });
     setShowModal(true);
   };
 
   const openEdit = (c) => {
     setEditCorso(c);
-    setForm({ nomeCorso: c.nomeCorso || '', descrizione: c.descrizione || '' });
+    setForm({
+      nomeCorso: c.nomeCorso || '',
+      descrizione: c.descrizione || '',
+      colore: c.colore || DEFAULT_COLOR,
+      icona: c.icona || DEFAULT_ICON,
+    });
     setShowModal(true);
     setMenuOpen(null);
   };
@@ -72,12 +146,18 @@ export default function Corsi() {
     if (!form.nomeCorso.trim()) { toast('Inserisci il nome del corso', 'error'); return; }
     setSaving(true);
     try {
+      const payload = {
+        nomeCorso: form.nomeCorso,
+        descrizione: form.descrizione,
+        colore: form.colore,
+        icona: form.icona,
+      };
       if (editCorso) {
-        await updateDoc(doc(db, 'users', user.uid, 'corsi', editCorso.id), form);
+        await updateDoc(doc(db, 'users', user.uid, 'corsi', editCorso.id), payload);
         toast('Corso aggiornato', 'success');
       } else {
         await addDoc(collection(db, 'users', user.uid, 'corsi'), {
-          ...form, createdAt: serverTimestamp()
+          ...payload, createdAt: serverTimestamp()
         });
         toast('Corso creato!', 'success');
       }
@@ -157,8 +237,11 @@ export default function Corsi() {
           </div>
         ) : (
           <div className="grid-3">
-            {filtered.map((c, idx) => {
-              const color = corsoColor(c.id);
+            {filtered.map((c) => {
+              const savedColor = c.colore;
+              const fgColor = savedColor?.fg || corsoColor(c.id);
+              const bgColor = savedColor?.bg || `${corsoColor(c.id)}20`;
+              const IconComp = getIconComp(c.icona);
               const nClassi = classiCount[c.id] ?? 0;
               return (
                 <div key={c.id} className="card card-hover" style={{ padding:0, overflow:'hidden', position:'relative' }}>
@@ -191,11 +274,11 @@ export default function Corsi() {
                     <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:14 }}>
                       <div style={{
                         width:52, height:52, borderRadius:14, flexShrink:0,
-                        background:`linear-gradient(135deg, ${color}30, ${color}10)`,
-                        border:`1.5px solid ${color}30`,
+                        background: bgColor,
+                        border:`1.5px solid ${fgColor}30`,
                         display:'flex', alignItems:'center', justifyContent:'center',
                       }}>
-                        <BookOpen size={24} style={{ color }} />
+                        <IconComp size={24} style={{ color: fgColor }} />
                       </div>
                       <div style={{ flex:1, paddingRight:28, paddingTop:2 }}>
                         <div style={{ fontSize:15, fontWeight:800, color:'var(--text)', lineHeight:1.3, marginBottom:4 }}>
@@ -212,14 +295,14 @@ export default function Corsi() {
                     {/* Footer */}
                     <div style={{
                       display:'flex', alignItems:'center', justifyContent:'space-between',
-                      paddingTop:12, borderTop:`1px solid ${color}20`,
+                      paddingTop:12, borderTop:`1px solid ${fgColor}20`,
                     }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:600, color }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:600, color: fgColor }}>
                         <Users size={13} />
                         <span style={{ color:'var(--text)' }}>{nClassi}</span>
                         <span style={{ color:'var(--text-2)', fontWeight:400 }}>{nClassi === 1 ? 'classe assegnata' : 'classi assegnate'}</span>
                       </div>
-                      <ChevronRight size={15} style={{ color:`${color}80` }} />
+                      <ChevronRight size={15} style={{ color:`${fgColor}80` }} />
                     </div>
                   </Link>
                 </div>
@@ -242,6 +325,28 @@ export default function Corsi() {
             </>
           }
         >
+          {/* Anteprima */}
+          <div style={{
+            display:'flex', alignItems:'center', gap:14, padding:'12px 14px',
+            background:'var(--bg)', borderRadius:12, marginBottom:20,
+            border:'1px solid var(--border)'
+          }}>
+            <div style={{
+              width:48, height:48, borderRadius:12, flexShrink:0,
+              background: form.colore.bg,
+              border:`1.5px solid ${form.colore.fg}30`,
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}>
+              {(() => { const IC = getIconComp(form.icona); return <IC size={22} style={{ color: form.colore.fg }} />; })()}
+            </div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>
+                {form.nomeCorso || 'Nome corso'}
+              </div>
+              <div style={{ fontSize:12, color:'var(--text-3)' }}>Anteprima</div>
+            </div>
+          </div>
+
           <div className="form-group">
             <label className="form-label">Nome Corso *</label>
             <input className="form-input" placeholder="es. Disegno e Composizione"
@@ -251,6 +356,61 @@ export default function Corsi() {
             <label className="form-label">Descrizione</label>
             <textarea className="form-input" rows={3} placeholder="Descrizione del corso..."
               value={form.descrizione} onChange={e => setForm(f => ({ ...f, descrizione: e.target.value }))} />
+          </div>
+
+          {/* Colore */}
+          <div className="form-group">
+            <label className="form-label">Colore</label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(10, 1fr)', gap:8 }}>
+              {CORSO_COLORS.map((c, i) => {
+                const selected = form.colore.fg === c.fg;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, colore: c }))}
+                    style={{
+                      width:'100%', aspectRatio:'1', borderRadius:10,
+                      background: c.bg,
+                      border: selected ? `2.5px solid ${c.fg}` : '2.5px solid transparent',
+                      boxShadow: selected ? `0 0 0 2px ${c.fg}30` : 'none',
+                      cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                      transition:'all 0.12s',
+                      boxSizing:'border-box',
+                    }}
+                  >
+                    <div style={{ width:14, height:14, borderRadius:4, background: c.fg, opacity: selected ? 1 : 0.7 }} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Icona */}
+          <div className="form-group" style={{ marginBottom:0 }}>
+            <label className="form-label">Icona</label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(10, 1fr)', gap:6 }}>
+              {CORSO_ICONS.map(({ name, comp: IC }) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, icona: name }))}
+                  title={name}
+                  style={{
+                    width:'100%', aspectRatio:'1', borderRadius:10,
+                    background: form.icona === name ? form.colore.bg : 'var(--bg)',
+                    border: form.icona === name
+                      ? `2px solid ${form.colore.fg}`
+                      : '2px solid var(--border)',
+                    cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                    color: form.icona === name ? form.colore.fg : 'var(--text-3)',
+                    transition:'all 0.1s',
+                  }}
+                >
+                  <IC size={18} />
+                </button>
+              ))}
+            </div>
           </div>
         </Modal>
       )}
