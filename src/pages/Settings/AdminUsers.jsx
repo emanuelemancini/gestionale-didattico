@@ -67,12 +67,22 @@ export default function AdminUsers({ adminEmail }) {
     setDialogConfig(null);
     setDeploying(true);
     try {
-      const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_frYfkekayE2qpQd0nM81wvrIEebv/ESBrCpoQ5P', { method: 'POST' });
-      if (!res.ok) throw new Error("Errore durante il deploy.");
-      setDialogConfig({
-        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}><Rocket size={20} /> Deploy avviato</span>,
-        message: "Il build è stato avviato su Vercel. L'app sarà aggiornata in pochi minuti."
-      });
+      const res = await fetch('/api/full-deploy', { method: 'POST' });
+      const data = await res.json();
+      const logList = (data.steps || []).map((s, i) => (
+        <div key={i} style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--text-2)', padding: '3px 0' }}>{s}</div>
+      ));
+      if (data.success) {
+        setDialogConfig({
+          title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}><Rocket size={20} /> Deploy completato</span>,
+          message: <div>{logList}</div>
+        });
+      } else {
+        setDialogConfig({
+          title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore deploy</span>,
+          message: <div>{logList}<p style={{ color: 'var(--danger)', marginTop: 8 }}>{data.error}</p></div>
+        });
+      }
     } catch (err) {
       setDialogConfig({
         title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore deploy</span>,
