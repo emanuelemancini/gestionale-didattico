@@ -16,7 +16,8 @@ const HOURS      = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_
 import { courseColor } from '../../utils/colors';
 import { isItalianHoliday } from '../../utils/italianHolidays';
 
-function lessonColor(l) {
+function lessonColor(l, corsiColorMap = {}) {
+  if (l.corsoId && corsiColorMap[l.corsoId]) return corsiColorMap[l.corsoId];
   const key = l.corsoId || l.nomeCorso || 'default';
   return courseColor(key);
 }
@@ -122,7 +123,7 @@ function ContextMenu({ x, y, lesson, onEdit, onMove, onDelete, onClose }) {
 }
 
 // ─── Month View ──────────────────────────────────────────────────────────────
-function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, onContextMenu, onMove }) {
+function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, onContextMenu, onMove, corsiColorMap = {} }) {
   const start = startOfWeek(startOfMonth(current), { weekStartsOn: 1 });
   const end   = endOfWeek(endOfMonth(current), { weekStartsOn: 1 });
   const days  = [];
@@ -137,7 +138,7 @@ function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, o
     lezioni.forEach((l) => {
       const key = format(l.dataDate, 'yyyy-MM-dd');
       if (!map[key]) map[key] = [];
-      map[key].push({ ...l, _color: lessonColor(l) });
+      map[key].push({ ...l, _color: lessonColor(l, corsiColorMap) });
     });
     Object.values(map).forEach(arr => arr.sort((a, b) => a.oraInizio.localeCompare(b.oraInizio)));
     return map;
@@ -211,7 +212,7 @@ function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, o
 }
 
 // ─── Week View ───────────────────────────────────────────────────────────────
-function WeekView({ current, lezioni, selectedDay, onSlotClick, onLessonClick, onContextMenu, onMove, onTimeMove, onDaySelect }) {
+function WeekView({ current, lezioni, selectedDay, onSlotClick, onLessonClick, onContextMenu, onMove, onTimeMove, onDaySelect, corsiColorMap = {} }) {
   const weekStart = startOfWeek(current, { weekStartsOn: 1 });
   const days      = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -225,7 +226,7 @@ function WeekView({ current, lezioni, selectedDay, onSlotClick, onLessonClick, o
     days.forEach(d => { map[format(d, 'yyyy-MM-dd')] = []; });
     lezioni.forEach(l => {
       const key = format(l.dataDate, 'yyyy-MM-dd');
-      if (map[key]) map[key].push({ ...l, _color: lessonColor(l) });
+      if (map[key]) map[key].push({ ...l, _color: lessonColor(l, corsiColorMap) });
     });
     Object.values(map).forEach(arr => arr.sort((a, b) => a.oraInizio.localeCompare(b.oraInizio)));
     return map;
@@ -533,12 +534,12 @@ function WeekView({ current, lezioni, selectedDay, onSlotClick, onLessonClick, o
 
 // ─── Day View ────────────────────────────────────────────────────────────────
 
-function DayView({ current, lezioni, onSlotClick, onLessonClick, onContextMenu, onTimeMove }) {
+function DayView({ current, lezioni, onSlotClick, onLessonClick, onContextMenu, onTimeMove, corsiColorMap = {} }) {
   const key        = format(current, 'yyyy-MM-dd');
   const dayLessons = useMemo(() =>
     lezioni
       .filter(l => format(l.dataDate, 'yyyy-MM-dd') === key)
-      .map(l => ({ ...l, _color: lessonColor(l) }))
+      .map(l => ({ ...l, _color: lessonColor(l, corsiColorMap) }))
   , [lezioni, current]);
 
   const colRef  = useRef(null);
@@ -690,7 +691,7 @@ function DayView({ current, lezioni, onSlotClick, onLessonClick, onContextMenu, 
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
-export default function LessonCalendar({ lezioni = [], onAdd, onEdit, onDelete, onDaySelect, onMonthChange, selectedDay, onMove, onTimeMove }) {
+export default function LessonCalendar({ lezioni = [], onAdd, onEdit, onDelete, onDaySelect, onMonthChange, selectedDay, onMove, onTimeMove, corsiColorMap = {} }) {
   const [view, setView]       = useState('month');
   const [current, setCurrent] = useState(new Date());
   const [ctxMenu, setCtxMenu] = useState(null); // { lesson, x, y }
@@ -742,9 +743,9 @@ export default function LessonCalendar({ lezioni = [], onAdd, onEdit, onDelete, 
 
       {/* Vista */}
       <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, overflow:'hidden' }}>
-        {view === 'month' && <MonthView current={current} lezioni={lezioni} selectedDay={selectedDay} onDayClick={d => onDaySelect && onDaySelect(d)} onLessonClick={l => onDaySelect?.(l.dataDate)} onContextMenu={openCtx} onMove={onMove} />}
-        {view === 'week'  && <WeekView  current={current} lezioni={lezioni} selectedDay={selectedDay} onContextMenu={openCtx} onMove={onMove} onTimeMove={onTimeMove} onDaySelect={onDaySelect} />}
-        {view === 'day'   && <DayView   current={current} lezioni={lezioni} onSlotClick={d => onAdd && onAdd(d)} onLessonClick={l => onEdit && onEdit(l)} onContextMenu={openCtx} onTimeMove={onTimeMove} />}
+        {view === 'month' && <MonthView current={current} lezioni={lezioni} selectedDay={selectedDay} onDayClick={d => onDaySelect && onDaySelect(d)} onLessonClick={l => onDaySelect?.(l.dataDate)} onContextMenu={openCtx} onMove={onMove} corsiColorMap={corsiColorMap} />}
+        {view === 'week'  && <WeekView  current={current} lezioni={lezioni} selectedDay={selectedDay} onContextMenu={openCtx} onMove={onMove} onTimeMove={onTimeMove} onDaySelect={onDaySelect} corsiColorMap={corsiColorMap} />}
+        {view === 'day'   && <DayView   current={current} lezioni={lezioni} onSlotClick={d => onAdd && onAdd(d)} onLessonClick={l => onEdit && onEdit(l)} onContextMenu={openCtx} onTimeMove={onTimeMove} corsiColorMap={corsiColorMap} />}
       </div>
 
       {/* Context menu */}

@@ -425,7 +425,12 @@ export default function Dashboard() {
   }
   // ────────────────────────────────────────────────────────────────────────────
 
-  function lessonColor(l) { const k = l.corsoId || l.nomeCorso || 'default'; return courseColor(k); }
+  function lessonColor(l) {
+    const corso = corsi.find(c => c.id === l.corsoId);
+    if (corso?.colore?.fg) return corso.colore.fg;
+    const k = l.corsoId || l.nomeCorso || 'default';
+    return courseColor(k);
+  }
 
   const TABS = [
     { id:'calendario',  label:'Calendario',       icon:<CalendarDays size={15}/> },
@@ -714,7 +719,7 @@ export default function Dashboard() {
 
           {/* ── Col 2: Calendario grande ── */}
           <div className="card" style={{ padding:0, overflow:'hidden', display:'flex', flexDirection:'column' }}>
-            <LessonCalendar lezioni={lezioni} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onDaySelect={setSelectedDay} onMonthChange={setCalMonth} selectedDay={selectedDay} onMove={handleMove} onTimeMove={handleTimeMove} />
+            <LessonCalendar lezioni={lezioni} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onDaySelect={setSelectedDay} onMonthChange={setCalMonth} selectedDay={selectedDay} onMove={handleMove} onTimeMove={handleTimeMove} corsiColorMap={Object.fromEntries(corsi.filter(c => c.colore?.fg).map(c => [c.id, c.colore.fg]))} />
           </div>
         </div>
         </div>
