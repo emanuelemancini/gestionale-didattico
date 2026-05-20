@@ -21,6 +21,7 @@ export default function Mailing() {
   const [sending, setSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+
   const [form, setForm] = useState({
     oggetto: '',
     corpo: '',
@@ -35,28 +36,25 @@ export default function Mailing() {
     try {
       // 1. Carica classi non archiviate
       const clSnap = await getDocs(collection(db, 'users', user.uid, 'classi'));
-      const activeClassi = clSnap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(c => !c.archiviata);
-      setClassi(activeClassi);
-
+      const activeClassi = clSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       // 2. Carica studenti per ogni classe
       const allStudenti = [];
       for (const cl of activeClassi) {
         const sSnap = await getDocs(collection(db, 'users', user.uid, 'classi', cl.id, 'studenti'));
         sSnap.docs.forEach(d => {
           const s = d.data();
-          if (s.email) { // solo studenti con email
-            allStudenti.push({ ...s, classeId: cl.id, nomeClasse: cl.nome_corso });
+          if (s.email) {
+            allStudenti.push({ ...s, classeId: cl.id, nomeClasse: cl.nome || cl.id });
           }
         });
       }
-      setStudenti(allStudenti);
 
       // 3. Carica storico email
       const mSnap = await getDocs(query(collection(db, 'users', user.uid, 'mailing'), orderBy('createdAt', 'desc')));
-      setStorico(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
+      setClassi(activeClassi);
+      setStudenti(allStudenti);
+      setStorico(mSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } finally {
       setLoading(false);
     }
@@ -95,7 +93,7 @@ export default function Mailing() {
         oggetto: form.oggetto,
         corpo: form.corpo,
         destinatariCount: destinatari.length,
-        classiNomi: classi.filter(c => form.classiSelezionate.includes(c.id)).map(c => c.nome_corso),
+        classiNomi: classi.filter(c => form.classiSelezionate.includes(c.id)).map(c => c.nome || c.id),
         simulato: result.simulated || false,
         createdAt: serverTimestamp()
       });
@@ -145,7 +143,7 @@ export default function Mailing() {
         <div className="grid-2" style={{ gap: 24 }}>
           {/* Form composizione */}
           <div className="card">
-            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Componi Email</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Componi email</h2>
             
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Seleziona Destinatari (Classi)</label>
@@ -158,7 +156,7 @@ export default function Mailing() {
                     return (
                       <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
                         <input type="checkbox" checked={form.classiSelezionate.includes(c.id)} onChange={() => toggleClasse(c.id)} />
-                        {c.nome_corso} <span style={{ color: 'var(--text-2)', fontSize: 12 }}>({cnt} studenti con email)</span>
+                        {c.nome || c.id} <span style={{ color: 'var(--text-2)', fontSize: 12 }}>({cnt} studenti con email)</span>
                       </label>
                     );
                   })}
@@ -190,7 +188,7 @@ export default function Mailing() {
           {/* Storico */}
           <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Storico Invii</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Storico invii</h2>
             </div>
             {storico.length === 0 ? (
               <div className="empty-state" style={{ flex: 1 }}>

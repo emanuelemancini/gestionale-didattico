@@ -12,67 +12,69 @@ import { Archive, RefreshCw, Trash2 } from 'lucide-react';
 export default function Archivio() {
   const { user } = useAuth();
   const toast = useToast();
-  const [classi, setClassi] = useState([]);
+  const [corsi, setCorsi] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => { loadClassi(); }, [user]);
+  useEffect(() => { loadCorsi(); }, [user]);
 
-  const loadClassi = async () => {
+  const loadCorsi = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, 'users', user.uid, 'classi'), where('archiviata', '==', true)));
-      setClassi(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const snap = await getDocs(query(collection(db, 'users', user.uid, 'corsi'), where('archiviato', '==', true)));
+      setCorsi(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } finally { setLoading(false); }
   };
 
-  const handleRipristina = async (cl) => {
-    await updateDoc(doc(db, 'users', user.uid, 'classi', cl.id), { archiviata: false });
-    toast('Classe ripristinata!', 'success');
-    loadClassi();
+  const handleRipristina = async (c) => {
+    await updateDoc(doc(db, 'users', user.uid, 'corsi', c.id), { archiviato: false });
+    toast('Corso ripristinato!', 'success');
+    loadCorsi();
   };
 
   const handleDelete = async () => {
-    await deleteDoc(doc(db, 'users', user.uid, 'classi', deleteTarget.id));
-    toast('Classe eliminata definitivamente', 'success');
+    await deleteDoc(doc(db, 'users', user.uid, 'corsi', deleteTarget.id));
+    toast('Corso eliminato definitivamente', 'success');
     setDeleteTarget(null);
-    loadClassi();
+    loadCorsi();
   };
 
   return (
     <>
-      <Header title="Archivio" subtitle="Classi archiviate" />
+      <Header title="Archivio" subtitle="Corsi archiviati" />
       <div className="page fade-in">
         <div style={{ marginBottom: 20 }}>
-          <Link to="/classi" className="btn btn-secondary btn-sm">← Torna alle Classi Attive</Link>
+          <Link to="/corsi" className="btn btn-secondary btn-sm">← Torna ai Corsi</Link>
         </div>
 
         {loading ? (
           [...Array(3)].map((_, i) => <div key={i} className="skeleton" style={{ height: 64, marginBottom: 8, borderRadius: 8 }} />)
-        ) : classi.length === 0 ? (
+        ) : corsi.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon"><Archive size={48} /></div>
             <div className="empty-state-title">Archivio vuoto</div>
-            <div className="empty-state-text">Le classi archiviate appariranno qui.</div>
+            <div className="empty-state-text">I corsi archiviati appariranno qui. Puoi archiviare un corso dal menu della pagina Corsi.</div>
           </div>
         ) : (
           <div className="card" style={{ padding: 0 }}>
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Corso</th><th>Anno</th><th style={{ width: 160 }}>Azioni</th></tr>
+                  <tr><th>Corso</th><th>Descrizione</th><th style={{ width: 160 }}>Azioni</th></tr>
                 </thead>
                 <tbody>
-                  {classi.map(cl => (
-                    <tr key={cl.id}>
-                      <td style={{ fontWeight: 600 }}>{cl.nome_corso}</td>
-                      <td><span className="badge badge-gray">{cl.anno_accademico}</span></td>
+                  {corsi.map(c => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 600 }}>{c.nomeCorso}</td>
+                      <td style={{ color: 'var(--text-2)', fontSize: 13 }}>{c.descrizione || '-'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button className="btn btn-secondary btn-sm" style={{display:'flex',gap:6,alignItems:'center'}} onClick={() => handleRipristina(cl)}><RefreshCw size={14} /> Ripristina</button>
-                          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', display:'flex', alignItems:'center', justifyContent:'center' }}
-                            onClick={() => setDeleteTarget(cl)}><Trash2 size={16} /></button>
+                          <button className="btn btn-secondary btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={() => handleRipristina(c)}>
+                            <RefreshCw size={14} /> Ripristina
+                          </button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => setDeleteTarget(c)}><Trash2 size={16} /></button>
                         </div>
                       </td>
                     </tr>
@@ -86,8 +88,8 @@ export default function Archivio() {
 
       {deleteTarget && (
         <ConfirmDialog
-          title="Elimina Classe Definitivamente"
-          message={`Vuoi eliminare definitivamente "${deleteTarget.nome_corso}"? Questa azione è irreversibile.`}
+          title="Elimina Corso Definitivamente"
+          message={`Vuoi eliminare definitivamente "${deleteTarget.nomeCorso}"? Questa azione è irreversibile.`}
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
         />

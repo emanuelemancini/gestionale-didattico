@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { Shield, Users, Mail, Clock, AlertTriangle } from 'lucide-react';
+import { Shield, Users, Mail, Clock, AlertTriangle, Rocket, Database, Trash2 } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
+import { useAuth } from '../../context/AuthContext';
+import { runReset, runSeed } from '../Seed/SeedPage';
 
 export default function AdminUsers({ adminEmail }) {
+  const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dialogConfig, setDialogConfig] = useState(null);
+  const [deploying, setDeploying] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -57,20 +63,153 @@ export default function AdminUsers({ adminEmail }) {
     }
   };
 
+  const handleConfirmDeploy = async () => {
+    setDialogConfig(null);
+    setDeploying(true);
+    try {
+      const res = await fetch('/api/deploy', { method: 'POST' });
+      if (!res.ok) throw new Error("Errore durante il deploy.");
+      const data = await res.json();
+      if (data.success) {
+        setDialogConfig({
+          title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}><Rocket size={20} /> Deploy completato</span>,
+          message: "L'app è stata pacchettizzata e inviata online con successo!"
+        });
+      } else {
+        throw new Error(data.error || "Errore sconosciuto.");
+      }
+    } catch (err) {
+      setDialogConfig({
+        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore deploy</span>,
+        message: err.message
+      });
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const handleDeploy = async () => {
+    setDeploying(true);
+    try {
+      const res = await fetch('/api/deploy-status');
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error("Il pulsante di Deploy funziona solo quando l'app è in esecuzione sul tuo Mac locale (localhost), non sull'app pubblica.");
+        }
+        throw new Error("Impossibile recuperare le modifiche.");
+      }
+      const data = await res.json();
+      
+      const filesList = data.files && data.files.length > 0 
+        ? data.files.map((f, i) => <div key={i} style={{fontSize: 13, fontFamily: 'monospace', color: 'var(--text-2)', background: 'var(--bg)', padding: '4px 8px', borderRadius: 4, marginBottom: 4}}>{f}</div>)
+        : <p style={{fontSize: 14, color: 'var(--text-2)'}}>Nessuna modifica rilevata. Verrà pubblicato il codice attuale.</p>;
+
+      setDialogConfig({
+        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Rocket size={20} color="var(--accent)" /> Conferma pubblicazione</span>,
+        message: (
+          <div>
+            <p style={{marginBottom: 16}}>Stai per pubblicare l'app su Vercel. Ecco i file modificati:</p>
+            <div style={{maxHeight: 200, overflowY: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, padding: 8}}>
+              {filesList}
+            </div>
+            <p style={{fontSize: 13, color: 'var(--text-3)'}}>Vuoi procedere con il caricamento online?</p>
+          </div>
+        ),
+        onConfirm: handleConfirmDeploy
+      });
+    } catch (err) {
+      setDialogConfig({
+        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore</span>,
+        message: err.message
+      });
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const executeResetDatabase = async () => {
+    setDialogConfig(null);
+    setResetting(true);
+    try {
+      const uid = user.uid;
+      // runReset gestisce corsi + classi + lezioni con il nuovo schema
+      await runReset(uid);
+      // elimina anche economia
+      const econSnap = await getDocs(collection(db, 'users', uid, 'economia'));
+      await Promise.all(econSnap.docs.map(d => deleteDoc(d.ref)));
+      setDialogConfig({ title: 'Database svuotato', message: 'Tutti i dati sono stati eliminati.', confirmLabel: 'Chiudi' });
+    } catch (err) {
+      console.error(err);
+      setDialogConfig({ title: <span style={{ color: 'var(--danger)' }}>Errore</span>, message: 'Errore: ' + err.message, confirmLabel: 'Chiudi' });
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleResetDatabase = () => {
+    setDialogConfig({
+      title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><Trash2 size={20} /> Svuota Database</span>,
+      message: 'Sei sicuro? Questa azione eliminerà DEFINITIVAMENTE tutti i dati: lezioni, corsi, studenti, presenze, voti. Non potrai tornare indietro.',
+      confirmLabel: 'Sì, elimina tutto',
+      confirmDanger: true,
+      onConfirm: executeResetDatabase,
+    });
+  };
+
+  const executeGenerateTestData = async () => {
+    setDialogConfig(null);
+    setGenerating(true);
+    try {
+      await runSeed(user.uid);
+      setDialogConfig({ title: 'Simulazione completata', message: 'Dati di esempio generati con corsi, classi, studenti, lezioni, presenze ed esercitazioni.' });
+    } catch (err) {
+      console.error(err);
+      setDialogConfig({ title: <span style={{ color: 'var(--danger)' }}>Errore</span>, message: 'Errore: ' + err.message });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGenerateTestData = () => {
+    setDialogConfig({
+      title: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Database size={20} color="var(--accent)" /> Generazione dati test</span>,
+      message: "Attenzione: verranno generate 8 classi (Graphic, Web, Foto) con finti studenti (da 20 a 30 per classe), simulando profili reali (assenze, eccellenti, fantasmi). Sei sicuro di voler procedere?",
+      onConfirm: executeGenerateTestData
+    });
+  };
+
   return (
     <div className="card" style={{ borderColor: 'var(--accent)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
-        <div style={{ background: 'var(--accent)20', padding: 8, borderRadius: 8 }}>
-          <Shield size={24} color="var(--accent)" />
+        <div style={{ background: 'rgba(13,148,136,0.12)', padding: 8, borderRadius: 8, flexShrink: 0 }}>
+          <Shield size={24} color="#0d9488" />
         </div>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Area Amministratore</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Area amministratore</h2>
           <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>Visibile solo a: {adminEmail}</p>
         </div>
+
+        <button
+          onClick={handleDeploy}
+          disabled={deploying}
+          style={{
+            marginLeft: 'auto', flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '10px 18px', borderRadius: 10,
+            background: '#134f5c', color: '#fff', border: 'none',
+            fontWeight: 600, fontSize: 14,
+            cursor: deploying ? 'not-allowed' : 'pointer',
+            opacity: deploying ? 0.7 : 1,
+            transition: 'opacity 0.15s',
+          }}
+        >
+          <Rocket size={16} />
+          {deploying ? 'Pubblicazione...' : 'Pubblica aggiornamenti'}
+        </button>
       </div>
 
       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Users size={18} /> Utenti Registrati ({users.length})
+        <Users size={18} /> Utenti registrati ({users.length})
       </h3>
 
       {loading ? (
@@ -130,13 +269,57 @@ export default function AdminUsers({ adminEmail }) {
         </div>
       )}
 
+      <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border)' }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Database size={18} /> Strumenti sviluppatore
+        </h3>
+        <p style={{ color: 'var(--text-2)', fontSize: 13, marginBottom: 16 }}>
+          Funzionalità avanzate e strumenti di test per la manutenzione dell'applicazione.
+        </p>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            onClick={handleResetDatabase}
+            disabled={resetting || generating}
+            className="btn btn-danger"
+          >
+            <Trash2 size={16} />
+            {resetting ? 'Eliminazione in corso...' : 'Svuota Database'}
+          </button>
+
+          <button
+            onClick={handleGenerateTestData}
+            disabled={generating || resetting}
+            className="btn btn-secondary"
+          >
+            <Database size={16} />
+            {generating ? 'Generazione in corso...' : 'Simulazione Anno Accademico (25/26)'}
+          </button>
+        </div>
+      </div>
+
       {dialogConfig && (
         <Modal
           title={dialogConfig.title}
           onClose={() => setDialogConfig(null)}
-          footer={<button className="btn btn-primary" onClick={() => setDialogConfig(null)}>Ho capito</button>}
+          footer={
+            dialogConfig.onConfirm ? (
+              <>
+                <button className="btn btn-secondary" onClick={() => setDialogConfig(null)}>Annulla</button>
+                <button
+                  className={dialogConfig.confirmDanger ? 'btn btn-danger' : 'btn btn-primary'}
+                  onClick={dialogConfig.onConfirm}
+                >
+                  {dialogConfig.confirmLabel || 'Conferma'}
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-primary" onClick={() => setDialogConfig(null)}>
+                {dialogConfig.confirmLabel || 'Chiudi'}
+              </button>
+            )
+          }
         >
-          <p style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>{dialogConfig.message}</p>
+          <div style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>{dialogConfig.message}</div>
         </Modal>
       )}
     </div>

@@ -9,7 +9,7 @@ import { getVotoClass } from '../../utils/anni';
 import { User, Paperclip } from 'lucide-react';
 
 export default function StudenteDetail() {
-  const { classeId, studenteId } = useParams();
+  const { corsoId, classeId, studenteId } = useParams();
   const { user } = useAuth();
 
   const [studente, setStudente] = useState(null);
@@ -27,46 +27,48 @@ export default function StudenteDetail() {
       // 1. Classe info
       const clDoc = await getDoc(doc(db, 'users', user.uid, 'classi', classeId));
       if (!clDoc.exists()) return;
-      setClasse({ id: clDoc.id, ...clDoc.data() });
 
       // 2. Studente info
       const sDocRef = doc(db, 'users', user.uid, 'classi', classeId, 'studenti', studenteId);
       const sDoc = await getDoc(sDocRef);
       if (!sDoc.exists()) return;
-      setStudente({ id: sDoc.id, ...sDoc.data() });
 
-      // 3. Voti / Esercitazioni
-      const esSnap = await getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'esercitazioni'));
+      // 3. Voti / Esercitazioni (dal percorso junction corsoId/classeId)
+      const esBasePath = corsoId
+        ? ['users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni']
+        : null;
       const votiList = [];
-      for (const es of esSnap.docs) {
-        const cRef = doc(db, 'users', user.uid, 'classi', classeId, 'esercitazioni', es.id, 'consegne', studenteId);
-        const cDoc = await getDoc(cRef);
-        if (cDoc.exists()) {
-          const d = cDoc.data();
-          if (d.voto !== null || d.file_url) {
-            votiList.push({
-              titolo: es.data().titolo,
-              data: es.data().data_scadenza,
-              ...d
-            });
+      if (esBasePath) {
+        const esSnap = await getDocs(collection(db, ...esBasePath));
+        for (const es of esSnap.docs) {
+          const cRef = doc(db, ...esBasePath, es.id, 'consegne', studenteId);
+          const cDoc = await getDoc(cRef);
+          if (cDoc.exists()) {
+            const d = cDoc.data();
+            if (d.voto !== null || d.file_url) {
+              votiList.push({ titolo: es.data().titolo, data: es.data().data_scadenza, ...d });
+            }
           }
         }
       }
-      setVoti(votiList.sort((a, b) => (new Date(b.data || 0)) - (new Date(a.data || 0))));
 
-      // 4. Presenze
-      const pSnap = await getDocs(query(collection(db, 'users', user.uid, 'classi', classeId, 'presenze'), where('studenteId', '==', studenteId)));
+      // 4. Presenze (dal percorso junction)
+      const presBasePath = corsoId
+        ? ['users', user.uid, 'corsi', corsoId, 'classi', classeId, 'presenze']
+        : null;
       let pres = 0;
-      pSnap.docs.forEach(p => {
-        if (p.data().stato === 'Presente') pres++;
-      });
-      // per il totale lezioni, controlliamo quante date distinte ci sono in presenze per la classe
-      const allPSnap = await getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'presenze'));
       const dates = new Set();
-      allPSnap.docs.forEach(p => dates.add(p.data().data));
-      
-      setPresenzeStats({ presenti: pres, tot: dates.size });
+      if (presBasePath) {
+        const pSnap = await getDocs(query(collection(db, ...presBasePath), where('studenteId', '==', studenteId)));
+        pSnap.docs.forEach(p => { if (p.data().stato === 'Presente') pres++; });
+        const allPSnap = await getDocs(collection(db, ...presBasePath));
+        allPSnap.docs.forEach(p => dates.add(p.data().data));
+      }
 
+      setClasse({ id: clDoc.id, ...clDoc.data() });
+      setStudente({ id: sDoc.id, ...sDoc.data() });
+      setVoti(votiList.sort((a, b) => (new Date(b.data || 0)) - (new Date(a.data || 0))));
+      setPresenzeStats({ presenti: pres, tot: dates.size });
     } finally {
       setLoading(false);
     }
@@ -87,7 +89,7 @@ export default function StudenteDetail() {
     <>
       <Header
         title={`${studente.cognome} ${studente.nome}`}
-        subtitle={`${classe?.nome_corso}`}
+        subtitle={`${classe?.nome || ''}`}
         actions={<Link to={`/classi/${classeId}`} className="btn btn-secondary btn-sm">← Torna alla Classe</Link>}
       />
       <div className="page fade-in">
@@ -133,7 +135,7 @@ export default function StudenteDetail() {
         {/* Tabella Storico Esercitazioni */}
         <div className="card" style={{ padding: 0 }}>
           <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Storico Valutazioni e Consegne</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Storico valutazioni e consegne</h2>
           </div>
           {voti.length === 0 ? (
             <div className="empty-state">

@@ -1,6 +1,6 @@
 // src/pages/Statistiche/Statistiche.jsx
-import { useState, useEffect, useMemo } from 'react';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/layout/Header';
@@ -20,9 +20,7 @@ export default function Statistiche() {
   const [loading, setLoading] = useState(true);
 
   // Filtri
-  const [anni, setAnni] = useState([]);
   const [classiList, setClassiList] = useState([]);
-  const [selectedAnno, setSelectedAnno] = useState('');
   const [selectedClasse, setSelectedClasse] = useState('');
 
   // Dati Aggregati
@@ -36,85 +34,87 @@ export default function Statistiche() {
     radarData: []
   });
 
-  useEffect(() => { loadFiltri(); }, [user]);
-  useEffect(() => { loadStats(); }, [user, selectedAnno, selectedClasse]);
-
-  const loadFiltri = async () => {
+  const loadFiltri = useCallback(async () => {
     if (!user) return;
     const classiSnap = await getDocs(collection(db, 'users', user.uid, 'classi'));
-    const allAnni = new Set();
     const allClassi = [];
     classiSnap.docs.forEach(d => {
-      if (!d.data().archiviata) {
-        if (d.data().anno_accademico) allAnni.add(d.data().anno_accademico);
-        allClassi.push({ id: d.id, nome: d.data().nome_corso, anno: d.data().anno_accademico });
-      }
+      allClassi.push({ id: d.id, nome: d.data().nome || d.id });
     });
-    setAnni([...allAnni].sort().reverse());
     setClassiList(allClassi.sort((a, b) => a.nome.localeCompare(b.nome)));
-  };
+  }, [user]);
 
-  const loadStats = async () => {
+  useEffect(() => { loadFiltri(); }, [loadFiltri]);
+
+  const loadStats = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const classiSnap = await getDocs(collection(db, 'users', user.uid, 'classi'));
-      
+      const [corsiSnap, classiSnap] = await Promise.all([
+        getDocs(collection(db, 'users', user.uid, 'corsi')),
+        getDocs(collection(db, 'users', user.uid, 'classi'))
+      ]);
+
+      const classiDataMap = {};
+      classiSnap.docs.forEach(d => { classiDataMap[d.id] = d.data(); });
+
+      const classiDaAnalizzare = classiSnap.docs.filter(cl =>
+        !selectedClasse || cl.id === selectedClasse
+      );
+
       let allVoti = [];
       const mediaClasseArray = [];
       let totPresenti = 0;
       let totAssenti = 0;
-      
       let consegneAttese = 0;
       let consegneFatte = 0;
+      const datePresenzeMap = {};
+      const studentiMap = {};
 
-      const datePresenzeMap = {}; // { 'YYYY-MM-DD': { presenti: 0, tot: 0 } }
-      const studentiMap = {}; // { id: { nome, cognome, classeId, classeNome, votiSum, votiCount, presenze, assenze } }
-
-      // Filtra le classi in base ai filtri
-      const classiDaAnalizzare = classiSnap.docs.filter(cl => {
-        if (cl.data().archiviata) return false;
-        if (selectedAnno && cl.data().anno_accademico !== selectedAnno) return false;
-        if (selectedClasse && cl.id !== selectedClasse) return false;
-        return true;
-      });
-
-      for (const cl of classiDaAnalizzare) {
-        const clName = cl.data().nome_corso;
-        const clId = cl.id;
-
-        // Recupera Studenti della classe
-        const sSnap = await getDocs(collection(db, 'users', user.uid, 'classi', clId, 'studenti'));
-        const numStudenti = sSnap.size;
+      // Carica studenti
+      await Promise.all(classiDaAnalizzare.map(async (cl) => {
+        const sSnap = await getDocs(collection(db, 'users', user.uid, 'classi', cl.id, 'studenti'));
         sSnap.docs.forEach(s => {
           studentiMap[s.id] = {
             id: s.id,
             nome: s.data().nome,
             cognome: s.data().cognome,
-            classeId: clId,
-            classeNome: clName,
+            classeId: cl.id,
+            classeNome: classiDataMap[cl.id]?.nome || cl.id,
             votiSum: 0, votiCount: 0,
             presenze: 0, assenze: 0
           };
         });
+      }));
 
-        // Esercitazioni e Voti
-        const esSnap = await getDocs(collection(db, 'users', user.uid, 'classi', clId, 'esercitazioni'));
-        const numEsercitazioni = esSnap.size;
-        consegneAttese += numStudenti * numEsercitazioni;
+      // Build junction pairs (corsoId, classeId)
+      const pairs = [];
+      await Promise.all(corsiSnap.docs.map(async (corsoDoc) => {
+        const jSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoDoc.id, 'classi'));
+        jSnap.docs.forEach(jDoc => {
+          if (!selectedClasse || jDoc.id === selectedClasse) {
+            pairs.push({ corsoId: corsoDoc.id, classeId: jDoc.id });
+          }
+        });
+      }));
+
+      // Carica esercitazioni e presenze dai percorsi junction
+      for (const { corsoId, classeId } of pairs) {
+        const clNome = classiDataMap[classeId]?.nome || classeId;
+        const numStudenti = Object.values(studentiMap).filter(s => s.classeId === classeId).length;
+
+        const esSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni'));
+        consegneAttese += numStudenti * esSnap.size;
 
         let clVotiSum = 0;
         let clVotiCount = 0;
 
         for (const es of esSnap.docs) {
-          const cSnap = await getDocs(collection(db, 'users', user.uid, 'classi', clId, 'esercitazioni', es.id, 'consegne'));
+          const cSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', es.id, 'consegne'));
           cSnap.docs.forEach(c => {
             const v = c.data().voto;
             const stId = c.data().studenteId || c.id;
-            
-            // Ha consegnato qualcosa (voto o file)
             if (v !== null || c.data().file_url) consegneFatte++;
-
             if (v !== null) {
               allVoti.push(v);
               clVotiSum += v;
@@ -126,22 +126,19 @@ export default function Statistiche() {
             }
           });
         }
-        
+
         if (clVotiCount > 0) {
-          mediaClasseArray.push({ name: clName.substring(0, 15), media: Number((clVotiSum / clVotiCount).toFixed(1)) });
+          mediaClasseArray.push({ name: clNome.substring(0, 15), media: Number((clVotiSum / clVotiCount).toFixed(1)) });
         }
 
-        // Presenze
-        const pSnap = await getDocs(collection(db, 'users', user.uid, 'classi', clId, 'presenze'));
+        const pSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'presenze'));
         pSnap.docs.forEach(p => {
           const d = p.data();
           const stId = d.studenteId;
           const stato = d.stato;
           const dataIso = d.data;
-
           if (!datePresenzeMap[dataIso]) datePresenzeMap[dataIso] = { presenti: 0, tot: 0 };
           datePresenzeMap[dataIso].tot++;
-          
           if (stato === 'Presente') {
             totPresenti++;
             datePresenzeMap[dataIso].presenti++;
@@ -214,7 +211,9 @@ export default function Statistiche() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, selectedClasse]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   const COLORS_PIE = ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#22c55e'];
   const totP = data.presenzeGlobali.presenti + data.presenzeGlobali.assenti;
@@ -237,25 +236,16 @@ export default function Statistiche() {
   return (
     <>
       <Header title="Statistiche Avanzate" subtitle="Dashboard interattiva delle performance" />
-      
+
       <div className="page fade-in">
-        
+
         {/* Barra Filtri */}
         <div className="card" style={{ marginBottom: 24, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontSize: 12 }}>Anno Accademico</label>
-            <select className="form-input" value={selectedAnno} onChange={e => setSelectedAnno(e.target.value)}>
-              <option value="">Tutti gli anni</option>
-              {anni.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
           <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
-            <label className="form-label" style={{ fontSize: 12 }}>Classe Specifica</label>
+            <label className="form-label" style={{ fontSize: 12 }}>Classe</label>
             <select className="form-input" value={selectedClasse} onChange={e => setSelectedClasse(e.target.value)}>
-              <option value="">Tutte le classi {selectedAnno ? `(${selectedAnno})` : ''}</option>
-              {classiList.filter(c => !selectedAnno || c.anno === selectedAnno).map(c => 
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              )}
+              <option value="">Tutte le classi</option>
+              {classiList.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
           {loading && <div style={{ fontSize: 13, color: 'var(--text-2)', display:'flex', alignItems:'center', gap:6 }}><Hourglass size={12} /> Aggiornamento...</div>}
@@ -267,7 +257,7 @@ export default function Statistiche() {
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, alignSelf: 'flex-start' }}>Frequenza</h2>
             {totP === 0 ? <div className="empty-state" style={{flex:1, padding:0}}><div className="empty-state-text">Nessun dato</div></div> : (
               <div style={{ position: 'relative', width: 160, height: 160 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <PieChart>
                     <Pie data={[{ name: 'Presenti', value: data.presenzeGlobali.presenti }, { name: 'Assenti', value: data.presenzeGlobali.assenti }]} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
                       <Cell fill="var(--success)" />
@@ -285,10 +275,10 @@ export default function Statistiche() {
 
           {/* Profilo Competenze (Radar) */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Profilo Performance</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Profilo performance</h2>
             {data.radarData.length === 0 || (data.radarData[0].A === 0 && data.radarData[1].A === 0) ? <div className="empty-state" style={{flex:1, padding:0}}><div className="empty-state-text">Nessun dato</div></div> : (
               <div style={{ width: '100%', height: 220 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.radarData}>
                     <PolarGrid stroke="var(--border)" />
                     <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-2)', fontSize: 11 }} />
@@ -303,10 +293,10 @@ export default function Statistiche() {
 
           {/* Distribuzione Voti (Bar) */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Fasce di Voto</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>Fasce di voto</h2>
             {data.distribuzioneVoti.length === 0 ? <div className="empty-state" style={{flex:1, padding:0}}><div className="empty-state-text">Nessun dato</div></div> : (
               <div style={{ width: '100%', height: 220 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={data.distribuzioneVoti} margin={{ top: 10, right: 0, left: -30, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis dataKey="name" stroke="var(--text-2)" fontSize={11} tickLine={false} axisLine={false} />
@@ -325,10 +315,10 @@ export default function Statistiche() {
         <div className="grid-2" style={{ gap: 24, marginBottom: 24 }}>
           {/* Trend Presenze (Area) */}
           <div className="card">
-            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Trend Presenze nel Tempo</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Trend presenze nel tempo</h2>
             {data.trendPresenze.length === 0 ? <div className="empty-state" style={{ height: 200, padding: 0 }}><div className="empty-state-text">Nessun dato temporale</div></div> : (
               <div style={{ height: 250 }}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={data.trendPresenze} margin={{ top: 10, right: 10, left: -30, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorPerc" x1="0" y1="0" x2="0" y2="1">
@@ -350,10 +340,10 @@ export default function Statistiche() {
           {/* Media per Classe (se si visualizzano più classi) */}
           {!selectedClasse && (
             <div className="card">
-              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Confronto Media Voti Classi</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Confronto media voti classi</h2>
               {data.mediaPerClasse.length === 0 ? <div className="empty-state" style={{ height: 200, padding: 0 }}><div className="empty-state-text">Nessun dato sufficiente</div></div> : (
                 <div style={{ height: 250 }}>
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <LineChart data={data.mediaPerClasse} margin={{ top: 10, right: 10, left: -30, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                       <XAxis dataKey="name" stroke="var(--text-2)" fontSize={11} tickLine={false} axisLine={false} />
@@ -369,10 +359,10 @@ export default function Statistiche() {
         </div>
 
         <div className="grid-2" style={{ gap: 24 }}>
-          {/* Top Performers */}
+          {/* Top performers */}
           <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, display:'flex', alignItems:'center', gap:8 }}><Trophy size={18} color="var(--warning)" /> Top Performers {selectedClasse ? 'della Classe' : 'Globali'}</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, display:'flex', alignItems:'center', gap:8 }}><Trophy size={18} color="var(--warning)" /> Top performers {selectedClasse ? 'della Classe' : 'Globali'}</h2>
             </div>
             {data.topPerformers.length === 0 ? (
               <div className="empty-state" style={{ flex: 1, padding: 40 }}><div className="empty-state-text">Nessun voto registrato</div></div>
@@ -384,7 +374,7 @@ export default function Statistiche() {
                     {data.topPerformers.map((s, i) => (
                       <tr key={i}>
                         <td style={{ fontWeight: 600 }}>
-                          <Link to={`/classi/${s.classeId}/studenti/${s.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                          <Link to={`/classi/${s.classeId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                             {s.cognome} {s.nome}
                           </Link>
                         </td>
@@ -401,7 +391,7 @@ export default function Statistiche() {
           {/* Studenti Critici */}
           <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', borderTop: '4px solid var(--danger)' }}>
             <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--danger)', display:'flex', alignItems:'center', gap:8 }}><AlertTriangle size={18} /> Studenti a Rischio</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--danger)', display:'flex', alignItems:'center', gap:8 }}><AlertTriangle size={18} /> Studenti a rischio</h2>
             </div>
             {data.studentiCritici.length === 0 ? (
               <div className="empty-state" style={{ flex: 1, padding: 40 }}><div className="empty-state-text">Nessuno studente a rischio rilevato.</div></div>
@@ -416,7 +406,7 @@ export default function Statistiche() {
                       return (
                         <tr key={i}>
                           <td style={{ fontWeight: 600 }}>
-                            <Link to={`/classi/${s.classeId}/studenti/${s.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <Link to={`/classi/${s.classeId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                               {s.cognome} {s.nome}
                             </Link>
                           </td>

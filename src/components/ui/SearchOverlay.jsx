@@ -22,7 +22,7 @@ export default function SearchOverlay({ onClose }) {
     const search = async () => {
       const classiSnap = await getDocs(collection(db, 'users', user.uid, 'classi'));
       const classiMatch = classiSnap.docs
-        .filter(d => d.data().nome_corso?.toLowerCase().includes(q) && !d.data().archiviata)
+        .filter(d => d.data().nome?.toLowerCase().includes(q))
         .map(d => ({ id: d.id, ...d.data() }))
         .slice(0, 4);
 
@@ -34,7 +34,7 @@ export default function SearchOverlay({ onClose }) {
             const { nome, cognome } = d.data();
             return [nome, cognome].some(v => v?.toLowerCase().includes(q));
           })
-          .map(d => ({ id: d.id, classeId: cl.id, nomeClasse: cl.data().nome_corso, ...d.data() }));
+          .map(d => ({ id: d.id, classeId: cl.id, nomeClasse: cl.data().nome || cl.id, ...d.data() }));
         studentiMatch.push(...found);
         if (studentiMatch.length >= 5) break;
       }
@@ -74,8 +74,8 @@ export default function SearchOverlay({ onClose }) {
                 <div key={c.id} className="search-result-item" onClick={() => go(`/classi/${c.id}`)}>
                   <span style={{ display:'flex', alignItems:'center', color:'var(--accent)' }}><GraduationCap size={18} /></span>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{c.nome_corso}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{c.anno_accademico}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{c.nome}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{c.istituzione || ''}</div>
                   </div>
                 </div>
               ))}
@@ -85,7 +85,7 @@ export default function SearchOverlay({ onClose }) {
             <>
               <div className="search-group-label">Studenti</div>
               {results.studenti.map(s => (
-                <div key={s.id} className="search-result-item" onClick={() => go(`/classi/${s.classeId}/studenti/${s.id}`)}>
+                <div key={s.id} className="search-result-item" onClick={() => go(`/classi/${s.classeId}`)}>
                   <span style={{ display:'flex', alignItems:'center', color:'var(--accent)' }}><User size={18} /></span>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nome} {s.cognome}</div>
