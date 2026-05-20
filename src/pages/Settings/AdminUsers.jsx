@@ -67,17 +67,12 @@ export default function AdminUsers({ adminEmail }) {
     setDialogConfig(null);
     setDeploying(true);
     try {
-      const res = await fetch('/api/deploy', { method: 'POST' });
+      const res = await fetch('https://api.vercel.com/v1/integrations/deploy/prj_frYfkekayE2qpQd0nM81wvrIEebv/ESBrCpoQ5P', { method: 'POST' });
       if (!res.ok) throw new Error("Errore durante il deploy.");
-      const data = await res.json();
-      if (data.success) {
-        setDialogConfig({
-          title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}><Rocket size={20} /> Deploy completato</span>,
-          message: "L'app è stata pacchettizzata e inviata online con successo!"
-        });
-      } else {
-        throw new Error(data.error || "Errore sconosciuto.");
-      }
+      setDialogConfig({
+        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}><Rocket size={20} /> Deploy avviato</span>,
+        message: "Il build è stato avviato su Vercel. L'app sarà aggiornata in pochi minuti."
+      });
     } catch (err) {
       setDialogConfig({
         title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore deploy</span>,
@@ -88,43 +83,12 @@ export default function AdminUsers({ adminEmail }) {
     }
   };
 
-  const handleDeploy = async () => {
-    setDeploying(true);
-    try {
-      const res = await fetch('/api/deploy-status');
-      if (!res.ok) {
-        if (res.status === 404) {
-          throw new Error("Il pulsante di Deploy funziona solo quando l'app è in esecuzione sul tuo Mac locale (localhost), non sull'app pubblica.");
-        }
-        throw new Error("Impossibile recuperare le modifiche.");
-      }
-      const data = await res.json();
-      
-      const filesList = data.files && data.files.length > 0 
-        ? data.files.map((f, i) => <div key={i} style={{fontSize: 13, fontFamily: 'monospace', color: 'var(--text-2)', background: 'var(--bg)', padding: '4px 8px', borderRadius: 4, marginBottom: 4}}>{f}</div>)
-        : <p style={{fontSize: 14, color: 'var(--text-2)'}}>Nessuna modifica rilevata. Verrà pubblicato il codice attuale.</p>;
-
-      setDialogConfig({
-        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Rocket size={20} color="var(--accent)" /> Conferma pubblicazione</span>,
-        message: (
-          <div>
-            <p style={{marginBottom: 16}}>Stai per pubblicare l'app su Vercel. Ecco i file modificati:</p>
-            <div style={{maxHeight: 200, overflowY: 'auto', marginBottom: 16, border: '1px solid var(--border)', borderRadius: 8, padding: 8}}>
-              {filesList}
-            </div>
-            <p style={{fontSize: 13, color: 'var(--text-3)'}}>Vuoi procedere con il caricamento online?</p>
-          </div>
-        ),
-        onConfirm: handleConfirmDeploy
-      });
-    } catch (err) {
-      setDialogConfig({
-        title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Errore</span>,
-        message: err.message
-      });
-    } finally {
-      setDeploying(false);
-    }
+  const handleDeploy = () => {
+    setDialogConfig({
+      title: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Rocket size={20} color="var(--accent)" /> Conferma pubblicazione</span>,
+      message: 'Stai per avviare un nuovo build su Vercel. L\'app pubblica verrà aggiornata in pochi minuti. Vuoi procedere?',
+      onConfirm: handleConfirmDeploy
+    });
   };
 
   const executeResetDatabase = async () => {
