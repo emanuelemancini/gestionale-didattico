@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import Header from '../../components/layout/Header';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { Moon, Sun, CheckCircle2, Play, Trash2, Loader2 } from 'lucide-react';
+import { Moon, Sun, CheckCircle2, Play, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import AdminUsers from './AdminUsers';
 import UserProfile from './UserProfile';
 import { runSeed, runReset } from '../Seed/SeedPage';
+import Modal from '../../components/ui/Modal';
 
 export default function Settings() {
   const { mode, updateThemeMode } = useTheme();
@@ -20,6 +21,7 @@ export default function Settings() {
   const [seedRunning, setSeedRunning] = useState(false);
   const [seedLogs, setSeedLogs] = useState([]);
   const [seedDone, setSeedDone] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState(null);
   
   const [activeTab, setActiveTab] = useState(() => {
     return sessionStorage.getItem('settings_tab') || 'profilo';
@@ -189,15 +191,23 @@ export default function Settings() {
                 <button
                   className="btn btn-danger"
                   disabled={seedRunning}
-                  onClick={async () => {
-                    if (!confirm('Eliminare tutti i dati? Questa operazione è irreversibile.')) return;
-                    if (!user) return;
-                    setSeedLogs([]); setSeedRunning(true); setSeedDone(false);
-                    try {
-                      await runReset(user.uid, msg => setSeedLogs(l => [...l, msg]));
-                    } catch (e) {
-                      setSeedLogs(l => [...l, '❌ Errore: ' + e.message]);
-                    } finally { setSeedRunning(false); }
+                  onClick={() => {
+                    setDialogConfig({
+                      title: <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--danger)' }}><AlertTriangle size={20} /> Elimina tutti i dati</span>,
+                      message: 'Questa operazione è irreversibile. Tutti i dati verranno eliminati definitivamente.',
+                      confirmLabel: 'Elimina tutto',
+                      confirmDanger: true,
+                      onConfirm: async () => {
+                        setDialogConfig(null);
+                        if (!user) return;
+                        setSeedLogs([]); setSeedRunning(true); setSeedDone(false);
+                        try {
+                          await runReset(user.uid, msg => setSeedLogs(l => [...l, msg]));
+                        } catch (e) {
+                          setSeedLogs(l => [...l, '❌ Errore: ' + e.message]);
+                        } finally { setSeedRunning(false); }
+                      }
+                    });
                   }}
                 >
                   <Trash2 size={16} /> Reset (elimina tutto)
@@ -219,6 +229,30 @@ export default function Settings() {
 
         </div>
       </div>
+
+      {dialogConfig && (
+        <Modal
+          title={dialogConfig.title}
+          onClose={() => setDialogConfig(null)}
+          footer={
+            dialogConfig.onConfirm ? (
+              <>
+                <button className="btn btn-secondary" onClick={() => setDialogConfig(null)}>Annulla</button>
+                <button
+                  className={dialogConfig.confirmDanger ? 'btn btn-danger' : 'btn btn-primary'}
+                  onClick={dialogConfig.onConfirm}
+                >
+                  {dialogConfig.confirmLabel || 'Conferma'}
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-primary" onClick={() => setDialogConfig(null)}>Chiudi</button>
+            )
+          }
+        >
+          <div style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>{dialogConfig.message}</div>
+        </Modal>
+      )}
     </>
   );
 }
