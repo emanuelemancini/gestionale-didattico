@@ -142,11 +142,11 @@ export default function Header({ title, subtitle, actions }) {
         <div className="header-title">{title}</div>
         {subtitle && <div className="header-subtitle">{subtitle}</div>}
       </div>
-      <div className="header-actions" ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {actions}
 
         {/* Barra di ricerca espandibile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        <div ref={wrapRef} style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative' }}>
           <div style={{
             overflow: 'hidden',
             width: searchOpen ? 350 : 0,
@@ -181,19 +181,9 @@ export default function Header({ title, subtitle, actions }) {
           >
             {searchOpen && query ? <X size={18} /> : <Search size={18} />}
           </button>
-        </div>
 
-        {/* Bell */}
-        <button
-          className="icon-btn"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)', color: '#fff' }}
-          title="Notifiche"
-        >
-          <Bell size={18} />
-        </button>
-
-        {/* Dropdown risultati */}
-        {showDropdown && (
+          {/* Dropdown risultati — posizionato relativo alla barra di ricerca */}
+          {showDropdown && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 500,
             background: 'var(--surface)', border: '1px solid var(--border)',
@@ -271,6 +261,17 @@ export default function Header({ title, subtitle, actions }) {
             )}
           </div>
         )}
+        </div>{/* fine wrapRef search */}
+
+        {/* Bell */}
+        <button
+          className="icon-btn"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent)', color: '#fff' }}
+          title="Notifiche"
+        >
+          <Bell size={18} />
+        </button>
+
       </div>
     </header>
   );

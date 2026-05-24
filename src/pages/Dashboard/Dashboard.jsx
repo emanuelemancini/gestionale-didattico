@@ -733,7 +733,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Col 2: Calendario grande ── */}
-          <div className="card" style={{ padding:0, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+          <div className="card" style={{ padding:0, overflow:'auto', display:'flex', flexDirection:'column', minWidth:0 }}>
             <LessonCalendar lezioni={lezioni} onAdd={openAdd} onEdit={openEdit} onDelete={handleDelete} onDaySelect={setSelectedDay} onMonthChange={setCalMonth} selectedDay={selectedDay} onMove={handleMove} onTimeMove={handleTimeMove} corsiColorMap={Object.fromEntries(corsi.filter(c => c.colore?.fg).map(c => [c.id, c.colore.fg]))} />
           </div>
         </div>
