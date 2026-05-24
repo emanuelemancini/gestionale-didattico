@@ -78,8 +78,7 @@ export default function ClasseDetail() {
   const [studenti, setStudenti] = useState([]);
   const [lezioni, setLezioni] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(() => sessionStorage.getItem('classe_tab') || 'programma');
-  useEffect(() => { sessionStorage.setItem('classe_tab', tab); }, [tab]);
+  const [tab, setTab] = useState('programma');
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);

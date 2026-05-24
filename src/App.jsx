@@ -14,12 +14,10 @@ import ClasseOverview from './pages/Classi/ClasseOverview';
 import Corsi from './pages/Corsi/Corsi';
 import CorsoDetail from './pages/Corsi/CorsoDetail';
 import StudenteDetail from './pages/Studenti/StudenteDetail';
-import Archivio from './pages/Archivio/Archivio';
 import Mailing from './pages/Mailing/Mailing';
-import Statistiche from './pages/Statistiche/Statistiche';
 import Settings from './pages/Settings/Settings';
 import Economia from './pages/Economia/Economia';
-import DatabasePage from './pages/Database/Database';
+import Strumenti from './pages/Strumenti/Strumenti';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -70,20 +68,18 @@ export default function App() {
             <Route path="/economia" element={
               <PrivateRoute><AppLayout><Economia /></AppLayout></PrivateRoute>
             } />
-            <Route path="/archivio" element={
-              <PrivateRoute><AppLayout><Archivio /></AppLayout></PrivateRoute>
+            <Route path="/strumenti" element={
+              <PrivateRoute><AppLayout><Strumenti /></AppLayout></PrivateRoute>
             } />
+            {/* Redirect vecchi link a /strumenti */}
+            <Route path="/archivio" element={<Navigate to="/strumenti" replace />} />
+            <Route path="/statistiche" element={<Navigate to="/strumenti" replace />} />
+            <Route path="/database" element={<Navigate to="/strumenti" replace />} />
             <Route path="/mailing" element={
               <PrivateRoute><AppLayout><Mailing /></AppLayout></PrivateRoute>
             } />
-            <Route path="/statistiche" element={
-              <PrivateRoute><AppLayout><Statistiche /></AppLayout></PrivateRoute>
-            } />
             <Route path="/impostazioni" element={
               <PrivateRoute><AppLayout><Settings /></AppLayout></PrivateRoute>
-            } />
-            <Route path="/database" element={
-              <PrivateRoute><AppLayout><DatabasePage /></AppLayout></PrivateRoute>
             } />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/layout/Header';
 import { Database as DatabaseIcon, Search, SlidersHorizontal, ChevronDown, Check, Settings } from 'lucide-react';
 
-export default function DatabasePage() {
+export default function DatabasePage({ hideHeader = false }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
@@ -140,7 +140,7 @@ export default function DatabasePage() {
 
   return (
     <>
-      <Header title="Database Generale" subtitle="Tutti gli studenti registrati nelle tue classi" />
+      {!hideHeader && <Header title="Database Generale" subtitle="Tutti gli studenti registrati nelle tue classi" />}
       
       <div className="page fade-in" style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div className="card" style={{ flex: 1, minWidth: 300, overflow: 'hidden' }}>

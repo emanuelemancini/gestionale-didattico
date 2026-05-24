@@ -269,7 +269,7 @@ function RiepilogoMensile({ lezioni, tariffe, month }) {
 export default function Economia() {
   const { user }          = useAuth();
   const { addToast }      = useToast();
-  const [tab, setTab]     = useState('riepilogo'); // 'riepilogo' | 'tariffe'
+  const [tab, setTab]     = useState(() => sessionStorage.getItem('economia_tab') || 'riepilogo');
   const [month, setMonth] = useState(new Date());
   const [lezioni, setLezioni]   = useState([]);
   const [tariffe, setTariffe]   = useState({});
@@ -313,11 +313,11 @@ export default function Economia() {
   return (
     <>
       <Header title="Economia" subtitle="Compensi, tariffe e riepilogo mensile" />
+      <div className="tabs" style={{ padding: '0 28px', position: 'sticky', top: 64, zIndex: 40, background: 'var(--surface)', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
+        <div className={`tab${tab === 'riepilogo' ? ' active' : ''}`} onClick={() => { setTab('riepilogo'); sessionStorage.setItem('economia_tab', 'riepilogo'); }}>Riepilogo mensile</div>
+        <div className={`tab${tab === 'tariffe' ? ' active' : ''}`} onClick={() => { setTab('tariffe'); sessionStorage.setItem('economia_tab', 'tariffe'); }}>Tariffe</div>
+      </div>
       <div className="page fade-in">
-        <div className="tabs" style={{ marginBottom:24 }}>
-          <div className={`tab${tab === 'riepilogo' ? ' active' : ''}`} onClick={() => setTab('riepilogo')}>Riepilogo mensile</div>
-          <div className={`tab${tab === 'tariffe' ? ' active' : ''}`} onClick={() => setTab('tariffe')}>Tariffe</div>
-        </div>
 
         {tab === 'tariffe' && (
           <TariffePanel tariffe={tariffe} istituzioni={istituzioni} onSave={saveTariffe} />

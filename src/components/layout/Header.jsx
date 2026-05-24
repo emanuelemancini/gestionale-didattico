@@ -1,5 +1,5 @@
 // src/components/layout/Header.jsx
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import { Search, Bell, GraduationCap, BookOpen, CalendarDays, Mail, FileText, X } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -34,6 +34,15 @@ export default function Header({ title, subtitle, actions }) {
   const [results, setResults] = useState({ classi: [], studenti: [], corsi: [], lezioni: [], mailing: [], programma: [] });
   const inputRef = useRef(null);
   const wrapRef = useRef(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 350 });
+
+  // Calcola posizione dropdown quando si apre
+  useEffect(() => {
+    if (searchOpen && query.trim().length >= 2 && wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 8, left: rect.left, width: rect.width });
+    }
+  }, [searchOpen, query]);
 
   // Chiudi cliccando fuori
   useEffect(() => {
@@ -149,7 +158,7 @@ export default function Header({ title, subtitle, actions }) {
         <div ref={wrapRef} style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative' }}>
           <div style={{
             overflow: 'hidden',
-            width: searchOpen ? 350 : 0,
+            width: searchOpen ? 400 : 0,
             transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
             display: 'flex', alignItems: 'center',
           }}>
@@ -182,13 +191,13 @@ export default function Header({ title, subtitle, actions }) {
             {searchOpen && query ? <X size={18} /> : <Search size={18} />}
           </button>
 
-          {/* Dropdown risultati — posizionato relativo alla barra di ricerca */}
+          {/* Dropdown risultati — position:fixed per uscire dallo stacking context dell'header */}
           {showDropdown && (
           <div style={{
-            position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 500,
+            position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999,
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 12, boxShadow: 'var(--shadow)',
-            width: 400, maxHeight: '70vh', overflowY: 'auto',
+            width: dropdownPos.width, maxHeight: '70vh', overflowY: 'auto',
             padding: 4,
           }}>
             {!hasResults && (

@@ -8,7 +8,7 @@ export default function ProssimeStrip({ lezioni = [], selectedDay, onDaySelect, 
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const displayStart = addDays(today, -3);
-  const displayEnd   = addDays(rangeEnd || addDays(today, 14), 5);
+  const displayEnd   = addDays(rangeEnd || addDays(today, 14), 4);
 
   // Raggruppa giorni per mese
   const allDays = eachDayOfInterval({ start: displayStart, end: displayEnd });
@@ -50,12 +50,11 @@ export default function ProssimeStrip({ lezioni = [], selectedDay, onDaySelect, 
             <div style={{
               position: 'sticky', left: 0, zIndex: 2, flexShrink: 0,
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '8px 14px',
+              padding: '8px 0',
               background: 'var(--accent)',
               borderRight: '1px solid color-mix(in srgb, #fff 20%, var(--accent))',
-              minWidth: 64,
-              /* Angoli sinistri arrotondati solo per le etichette non-prime (quelle "in mezzo") */
-              borderRadius: isFirst(key) ? 0 : '10px 0 0 10px',
+              width: 80,
+              borderRadius: 10,
             }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: '#fff', textTransform: 'uppercase', lineHeight: 1 }}>
                 {format(month, 'MMM', { locale: it })}

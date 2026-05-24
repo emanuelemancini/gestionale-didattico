@@ -15,7 +15,7 @@ import { it } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 import { Trophy, AlertTriangle, Star, Hourglass } from 'lucide-react';
 
-export default function Statistiche() {
+export default function Statistiche({ hideHeader = false }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
 
@@ -231,11 +231,11 @@ export default function Statistiche() {
     return null;
   };
 
-  if (loading && classiList.length === 0) return <><Header title="Statistiche" /><div className="page"><div className="skeleton" style={{ height: 400 }} /></div></>;
+  if (loading && classiList.length === 0) return <>{!hideHeader && <Header title="Statistiche" />}<div className="page"><div className="skeleton" style={{ height: 400 }} /></div></>;
 
   return (
     <>
-      <Header title="Statistiche Avanzate" subtitle="Dashboard interattiva delle performance" />
+      {!hideHeader && <Header title="Statistiche Avanzate" subtitle="Dashboard interattiva delle performance" />}
 
       <div className="page fade-in">
 

@@ -9,7 +9,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Link } from 'react-router-dom';
 import { Archive, RefreshCw, Trash2 } from 'lucide-react';
 
-export default function Archivio() {
+export default function Archivio({ hideHeader = false }) {
   const { user } = useAuth();
   const toast = useToast();
   const [corsi, setCorsi] = useState([]);
@@ -42,7 +42,7 @@ export default function Archivio() {
 
   return (
     <>
-      <Header title="Archivio" subtitle="Corsi archiviati" />
+      {!hideHeader && <Header title="Archivio" subtitle="Corsi archiviati" />}
       <div className="page fade-in">
         <div style={{ marginBottom: 20 }}>
           <Link to="/corsi" className="btn btn-secondary btn-sm">← Torna ai Corsi</Link>

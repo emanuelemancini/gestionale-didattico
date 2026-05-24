@@ -16,7 +16,7 @@ import {
   Zap, AlarmClock, LayoutGrid, MapPin, BookOpen
 } from 'lucide-react';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
-import { format, isToday, isTomorrow, addDays, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
+import { format, isToday, isTomorrow, addDays, startOfMonth, endOfMonth, isSameDay, startOfDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { courseColor } from '../../utils/colors';
 import { isItalianHoliday } from '../../utils/italianHolidays';
@@ -75,7 +75,7 @@ export default function Dashboard() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [calMonth, setCalMonth]       = useState(new Date());
-  const [activeTab, setActiveTab]     = useState(() => sessionStorage.getItem('dashScrollTo') ? (sessionStorage.getItem('dashTab') || 'calendario') : 'calendario');
+  const [activeTab, setActiveTab]     = useState(() => sessionStorage.getItem('dashTab') || 'calendario');
   const [prossimeActiveDay, setProssimeActiveDay] = useState(new Date());
 
   const loadLezioni = useCallback(async () => {
@@ -117,8 +117,9 @@ export default function Dashboard() {
   // Scroll-spy: evidenzia il giorno corrente nel calendario orizzontale mentre si scrolla
   useEffect(() => {
     if (activeTab !== 'prossime') return;
-    const OFFSET = 64 + 72 + 12; // header (64px) + strip calendario (~72px) + margine (12px)
     const handleScroll = () => {
+      const stripWrapper = document.getElementById('prossime-strip-wrapper');
+      const OFFSET = stripWrapper ? stripWrapper.getBoundingClientRect().bottom + 12 : 180;
       const dayEls = document.querySelectorAll('[id^="day-"]');
       let activeKey = null;
       dayEls.forEach(el => {
@@ -440,14 +441,15 @@ export default function Dashboard() {
     { id:'scadenze',    label:'Scadenze',          icon:<Clock size={15}/> },
   ];
 
-  // Lezioni prossimi 14 giorni (per tab dedicata)
+  // Lezioni prossimi 14 giorni (per tab dedicata) — usa startOfDay per non escludere le lezioni di oggi
+  const _oggi14 = startOfDay(new Date());
   const lessonProssime14 = lezioni
-    .filter(l => l.dataDate >= new Date() && l.dataDate < addDays(new Date(), 14))
+    .filter(l => l.dataDate >= _oggi14 && l.dataDate < addDays(_oggi14, 15))
     .sort((a, b) => a.dataDate - b.dataDate || a.oraInizio.localeCompare(b.oraInizio));
 
-  // Lezioni extra (giorni 14-18) sbiadite
+  // Lezioni extra (giorni 15-18, 4 giorni) sbiadite
   const lessonExtra = lezioni
-    .filter(l => l.dataDate >= addDays(new Date(), 14) && l.dataDate < addDays(new Date(), 18))
+    .filter(l => l.dataDate >= addDays(_oggi14, 15) && l.dataDate < addDays(_oggi14, 19))
     .sort((a, b) => a.dataDate - b.dataDate || a.oraInizio.localeCompare(b.oraInizio));
 
   return (
@@ -458,7 +460,7 @@ export default function Dashboard() {
       />
 
       {/* ── Tab bar ── */}
-      <div style={{ display:'flex', gap:2, padding:'0 24px', borderBottom:'1px solid var(--border)', marginBottom:0, background:'var(--surface)', position:'sticky', top:0, zIndex:40, scrollbarGutter:'stable' }}>
+      <div style={{ display:'flex', gap:2, padding:'0 24px', borderBottom:'1px solid var(--border)', marginBottom:0, background:'var(--surface)', position:'sticky', top:64, zIndex:40, scrollbarGutter:'stable' }}>
         {TABS.map(t => (
           <button
             key={t.id}
@@ -489,11 +491,11 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="page fade-in" style={{ display:'flex', flexDirection:'column', gap:16, paddingTop: (activeTab === 'calendario' || activeTab === 'prossime') ? 16 : 28 }}>
+      <div className="page fade-in" style={{ display:'flex', flexDirection:'column', gap:16, paddingTop: activeTab === 'calendario' ? 16 : activeTab === 'prossime' ? 0 : 28, paddingBottom: activeTab === 'calendario' ? 0 : 28 }}>
 
         {/* ══ TAB: CALENDARIO ══ */}
         {activeTab === 'calendario' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:16, height:'calc(100vh - 156px)', minHeight:500 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:16, height:'calc(100vh - 143px)', minHeight:500 }}>
 
           {/* Striscia mese orizzontale */}
           <MonthStrip lezioni={lezioni} selectedDay={selectedDay} onDaySelect={setSelectedDay} month={calMonth} />
@@ -766,8 +768,8 @@ export default function Dashboard() {
 
           return (
             <div>
-              {/* Calendario orizzontale sticky */}
-              <div style={{ position:'sticky', top:64, zIndex:150, paddingTop:0, paddingBottom:0, background:'var(--bg)' }}>
+              {/* Calendario orizzontale sticky — sotto header (64) + tab bar (~42) */}
+              <div id="prossime-strip-wrapper" style={{ position:'sticky', top:106, zIndex:150, paddingTop:16, paddingBottom:0, background:'var(--bg)' }}>
                 <ProssimeStrip
                   lezioni={lezioni}
                   selectedDay={prossimeActiveDay}
@@ -777,7 +779,8 @@ export default function Dashboard() {
                     const key = format(day, 'yyyy-MM-dd');
                     const el = document.getElementById(`day-${key}`);
                     if (el) {
-                      const OFFSET = 64 + 72 + 12;
+                      const stripWrapper = document.getElementById('prossime-strip-wrapper');
+                      const OFFSET = stripWrapper ? stripWrapper.getBoundingClientRect().bottom + 12 : 180;
                       const top = el.getBoundingClientRect().top + window.scrollY - OFFSET;
                       window.scrollTo({ top, behavior: 'smooth' });
                       setTimeout(() => {

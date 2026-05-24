@@ -5,20 +5,18 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 
-import { LayoutDashboard, Users, Archive, Mail, BarChart3, Settings as SettingsIcon, GraduationCap, Wallet, Database, BookOpen, LogOut } from 'lucide-react';
+import { LayoutDashboard, Mail, Settings as SettingsIcon, GraduationCap, Wallet, BookOpen, LogOut, Wrench } from 'lucide-react';
 import { useStats } from '../../context/StatsContext';
 import MiniCalendar from '../ui/MiniCalendar';
 
 const NAV = [
   { to: '/dashboard',    icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
-  { to: '/corsi',        icon: <BookOpen size={20} />,      label: 'Corsi' },
-  { to: '/classi',       icon: <GraduationCap size={20} />, label: 'Classi' },
-  { to: '/economia',     icon: <Wallet size={20} />, label: 'Economia' },
-  { to: '/database',     icon: <Database size={20} />, label: 'Database' },
-  { to: '/archivio',     icon: <Archive size={20} />, label: 'Archivio' },
-  { to: '/mailing',      icon: <Mail size={20} />,  label: 'Mailing' },
-  { to: '/statistiche',  icon: <BarChart3 size={20} />, label: 'Statistiche' },
-  { to: '/impostazioni', icon: <SettingsIcon size={20} />, label: 'Impostazioni' },
+  { to: '/corsi',        icon: <BookOpen size={20} />,       label: 'Corsi' },
+  { to: '/classi',       icon: <GraduationCap size={20} />,  label: 'Classi' },
+  { to: '/economia',     icon: <Wallet size={20} />,         label: 'Economia' },
+  { to: '/mailing',      icon: <Mail size={20} />,           label: 'Mailing' },
+  { to: '/strumenti',    icon: <Wrench size={20} />,         label: 'Strumenti' },
+  { to: '/impostazioni', icon: <SettingsIcon size={20} />,   label: 'Impostazioni' },
 ];
 
 export default function Sidebar() {
@@ -83,10 +81,10 @@ export default function Sidebar() {
           )}
         </div>
         <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.3 }}>Gestionale Didattico</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.9)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {user?.displayName || user?.email}
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.2 }}>Gestionale Didattico</div>
         </div>
       </div>
 
@@ -96,6 +94,9 @@ export default function Sidebar() {
             key={to}
             to={to}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            onClick={() => {
+              ['dashTab', 'settings_tab', 'economia_tab', 'strumenti_tab'].forEach(k => sessionStorage.removeItem(k));
+            }}
           >
             <span className="nav-icon">{icon}</span>
             {label}

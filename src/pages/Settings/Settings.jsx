@@ -23,9 +23,7 @@ export default function Settings() {
   const [seedDone, setSeedDone] = useState(false);
   const [dialogConfig, setDialogConfig] = useState(null);
   
-  const [activeTab, setActiveTab] = useState(() => {
-    return sessionStorage.getItem('settings_tab') || 'profilo';
-  });
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('settings_tab') || 'profilo');
 
   useEffect(() => {
     sessionStorage.setItem('settings_tab', activeTab);
@@ -41,62 +39,32 @@ export default function Settings() {
   return (
     <>
       <Header title="Impostazioni" subtitle="Gestisci le preferenze del tuo account" />
+      {/* MENU TAB sticky */}
+      <div style={{ display: 'flex', gap: 2, padding: '0 28px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', position: 'sticky', top: 64, zIndex: 40, overflowX: 'auto', scrollbarGutter: 'stable' }}>
+        {[
+          { id: 'profilo', label: 'Il Tuo Profilo' },
+          { id: 'aspetto', label: 'Aspetto' },
+          ...(isAdmin ? [{ id: 'admin', label: 'Amministrazione' }] : []),
+          { id: 'dati', label: 'Dati di esempio' },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            style={{
+              background: 'none', border: 'none',
+              padding: '11px 16px',
+              fontSize: 15, fontWeight: activeTab === t.id ? 700 : 500,
+              color: activeTab === t.id ? 'var(--accent)' : 'var(--text-2)',
+              borderBottom: activeTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: -1, cursor: 'pointer', transition: 'color 0.15s', whiteSpace: 'nowrap',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
       <div className="page fade-in">
         <div style={{ maxWidth: 820, margin: '0 auto' }}>
-          
-          {/* MENU TAB */}
-          <div style={{ display: 'flex', gap: 32, marginBottom: 24, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-            <button
-              onClick={() => setActiveTab('profilo')}
-              style={{
-                background: 'none', border: 'none', padding: '0 0 12px 0',
-                fontSize: 16, fontWeight: activeTab === 'profilo' ? 700 : 500,
-                color: activeTab === 'profilo' ? 'var(--text)' : 'var(--text-3)',
-                borderBottom: activeTab === 'profilo' ? '2px solid var(--accent)' : '2px solid transparent',
-                cursor: 'pointer', transition: 'var(--transition)', whiteSpace: 'nowrap'
-              }}
-            >
-              Il Tuo Profilo
-            </button>
-            <button
-              onClick={() => setActiveTab('aspetto')}
-              style={{
-                background: 'none', border: 'none', padding: '0 0 12px 0',
-                fontSize: 16, fontWeight: activeTab === 'aspetto' ? 700 : 500,
-                color: activeTab === 'aspetto' ? 'var(--text)' : 'var(--text-3)',
-                borderBottom: activeTab === 'aspetto' ? '2px solid var(--accent)' : '2px solid transparent',
-                cursor: 'pointer', transition: 'var(--transition)', whiteSpace: 'nowrap'
-              }}
-            >
-              Aspetto
-            </button>
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                style={{
-                  background: 'none', border: 'none', padding: '0 0 12px 0',
-                  fontSize: 16, fontWeight: activeTab === 'admin' ? 700 : 500,
-                  color: activeTab === 'admin' ? 'var(--text)' : 'var(--text-3)',
-                  borderBottom: activeTab === 'admin' ? '2px solid var(--accent)' : '2px solid transparent',
-                  cursor: 'pointer', transition: 'var(--transition)'
-                }}
-              >
-                Amministrazione
-              </button>
-            )}
-            <button
-              onClick={() => setActiveTab('dati')}
-              style={{
-                background: 'none', border: 'none', padding: '0 0 12px 0',
-                fontSize: 16, fontWeight: activeTab === 'dati' ? 700 : 500,
-                color: activeTab === 'dati' ? 'var(--text)' : 'var(--text-3)',
-                borderBottom: activeTab === 'dati' ? '2px solid var(--accent)' : '2px solid transparent',
-                cursor: 'pointer', transition: 'var(--transition)', whiteSpace: 'nowrap'
-              }}
-            >
-              Dati di esempio
-            </button>
-          </div>
 
           {/* CONTENUTO TAB ASPETTO */}
           {activeTab === 'aspetto' && (

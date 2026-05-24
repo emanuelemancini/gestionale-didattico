@@ -148,8 +148,9 @@ function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, o
   const HOLIDAY_COLS = new Set([6]); // indice 6 = Dom (0-based nella settimana lun-dom)
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+    <div style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0, overflowY:'auto' }}>
+      {/* Header giorni settimana — sticky durante lo scroll */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7, 1fr)', borderBottom:'1px solid var(--border)', flexShrink:0, position:'sticky', top:0, zIndex:1, background:'var(--surface)' }}>
         {WEEK_DAYS.map((wd, i) => (
           <div key={wd} className="cal-month-weekday" style={HOLIDAY_COLS.has(i) ? { color:'var(--danger)' } : undefined}>{wd}</div>
         ))}
@@ -157,8 +158,7 @@ function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, o
       <div style={{
         flex: 1, display: 'grid',
         gridTemplateColumns: 'repeat(7, 1fr)',
-        gridTemplateRows: `repeat(${numWeeks}, 1fr)`,
-        minHeight: 0,
+        gridTemplateRows: `repeat(${numWeeks}, minmax(100px, 1fr))`,
       }}>
         {days.map(day => {
           const key        = format(day, 'yyyy-MM-dd');
