@@ -28,6 +28,7 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
     note:        '',
     durata:      120,
     argomentoId: '',
+    sottoargomentoId: '',
     ...(isEdit ? {
       data:        lesson.data,
       oraInizio:   lesson.oraInizio,
@@ -39,6 +40,7 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
       note:        lesson.note || '',
       durata:      lesson.durata || 120,
       argomentoId: lesson.argomentoId || '',
+      sottoargomentoId: lesson.sottoargomentoId || '',
     } : {})
   });
 
@@ -82,12 +84,12 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
 
   function handleCorsoChange(corsoId) {
     const corso = corsi.find(c => c.id === corsoId);
-    setForm(f => ({ ...f, corsoId, nomeCorso: corso?.nomeCorso || '', classeId: '', istituzione: '', argomentoId: '' }));
+    setForm(f => ({ ...f, corsoId, nomeCorso: corso?.nomeCorso || '', classeId: '', istituzione: '', argomentoId: '', sottoargomentoId: '' }));
   }
 
   function handleClasseChange(classeId) {
     const classe = classiJunction.find(c => c.id === classeId);
-    setForm(f => ({ ...f, classeId, istituzione: classe?.istituzione || f.istituzione, argomentoId: '' }));
+    setForm(f => ({ ...f, classeId, istituzione: classe?.istituzione || f.istituzione, argomentoId: '', sottoargomentoId: '' }));
   }
 
   // Lezioni dello stesso corso+classe, per riferimento
@@ -132,6 +134,7 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
         note:        form.note || '',
         durata:      form.durata || 0,
         argomentoId: form.argomentoId || null,
+        sottoargomentoId: form.sottoargomentoId || null,
         dataDate:    Timestamp.fromDate(new Date(form.data + 'T12:00:00')),
       };
       if (isEdit) {
@@ -201,12 +204,28 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
           {form.classeId && programma.length > 0 && (
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Argomento del programma</label>
-              <select className="form-input" value={form.argomentoId} onChange={e => set('argomentoId', e.target.value)}>
+              <select className="form-input" value={form.argomentoId} onChange={e => { set('argomentoId', e.target.value); set('sottoargomentoId', ''); }}>
                 <option value="">— Nessun argomento —</option>
                 {programma.map(t => <option key={t.id} value={t.id}>{t.titolo}</option>)}
               </select>
             </div>
           )}
+
+          {/* Sottoargomento */}
+          {(() => {
+            const topic = programma.find(t => t.id === form.argomentoId);
+            const subs = topic?.sottoargomenti || [];
+            if (!form.argomentoId || subs.length === 0) return null;
+            return (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Sottoargomento</label>
+                <select className="form-input" value={form.sottoargomentoId} onChange={e => set('sottoargomentoId', e.target.value)}>
+                  <option value="">— Nessun sottoargomento —</option>
+                  {subs.map(s => <option key={s.id} value={s.id}>{s.titolo}</option>)}
+                </select>
+              </div>
+            );
+          })()}
 
           {/* Data / Inizio / Fine */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>

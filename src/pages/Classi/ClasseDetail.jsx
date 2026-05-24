@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { jsPDF } from 'jspdf';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -11,13 +12,21 @@ import Tesseract from 'tesseract.js';
 import {
   FolderUp, Camera, Download, User, Trash2, PenTool,
   CheckCircle2, Hourglass, FileText, Calendar, BookOpen, Clock,
-  ChevronLeft, BarChart2, Users, CheckSquare, Square, Edit2
+  ChevronLeft, ChevronDown, ChevronRight, BarChart2, Users, CheckSquare, Square, Edit2, Plus, GripVertical
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import PresenzeTab from './tabs/PresenzeTab';
 import EsercitazioniTab from './tabs/EsercitazioniTab';
+import VotiTab from './tabs/VotiTab';
 import LessonModal from '../../components/ui/LessonModal';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 function generateCode(nome) {
   const words = (nome || '').trim().toUpperCase().split(/\s+/).filter(w => w.length > 2);
@@ -25,11 +34,36 @@ function generateCode(nome) {
   return words.slice(0, 2).map(w => w.slice(0, 3)).join('-');
 }
 
+function SortableTopicCard({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={{ ...style, padding: 0, overflow: 'hidden' }} className="card">
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+function SortableSubItem({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'programma', label: 'Programma Didattico' },
   { id: 'lezioni',   label: 'Registro Lezioni' },
   { id: 'studenti',  label: 'Studenti' },
   { id: 'presenze',  label: 'Presenze' },
+  { id: 'voti',      label: 'Voti' },
   { id: 'esercitazioni', label: 'Esercitazioni' },
 ];
 
@@ -59,6 +93,7 @@ export default function ClasseDetail() {
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrRows, setOcrRows] = useState([]);
   const [ocrImage, setOcrImage] = useState(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [editLesson, setEditLesson] = useState(null);
   const [programma, setProgramma] = useState([]);
@@ -66,6 +101,15 @@ export default function ClasseDetail() {
   const [editTopic, setEditTopic] = useState(null);
   const [topicForm, setTopicForm] = useState({ titolo: '', descrizione: '' });
   const [savingTopic, setSavingTopic] = useState(false);
+  const [modalSubs, setModalSubs] = useState([]);   // sottoargomenti nella modale
+  const [modalSubInput, setModalSubInput] = useState('');
+  const [editingModalSub, setEditingModalSub] = useState(null); // { id, titolo }
+  const [editingModalSubValue, setEditingModalSubValue] = useState('');
+  const [expandedTopics, setExpandedTopics] = useState({});
+  const [subForm, setSubForm] = useState({});  // { [topicId]: string }
+  const [addingSubTo, setAddingSubTo] = useState(null); // topicId
+  const [editingSub, setEditingSub] = useState(null); // { topicId, subId }
+  const [editSubValue, setEditSubValue] = useState('');
 
   useEffect(() => { loadData(); }, [corsoId, classeId, user]);
 
@@ -119,8 +163,8 @@ export default function ClasseDetail() {
   const prossime = lezioni.filter(l => new Date(l.data) >= now).slice(0, 3);
 
   // ── Programma ─────────────────────────────────────────────────────────────
-  const openNewTopic = () => { setEditTopic(null); setTopicForm({ titolo: '', descrizione: '' }); setShowTopicModal(true); };
-  const openEditTopic = (t) => { setEditTopic(t); setTopicForm({ titolo: t.titolo, descrizione: t.descrizione || '' }); setShowTopicModal(true); };
+  const openNewTopic = () => { setEditTopic(null); setTopicForm({ titolo: '', descrizione: '' }); setModalSubs([]); setModalSubInput(''); setEditingModalSub(null); setShowTopicModal(true); };
+  const openEditTopic = (t) => { setEditTopic(t); setTopicForm({ titolo: t.titolo, descrizione: t.descrizione || '' }); setModalSubs(t.sottoargomenti || []); setModalSubInput(''); setEditingModalSub(null); setShowTopicModal(true); };
 
   const handleSaveTopic = async () => {
     if (!topicForm.titolo.trim()) return toast('Inserisci un titolo', 'warning');
@@ -129,10 +173,10 @@ export default function ClasseDetail() {
       const col = collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma');
       if (editTopic) {
         await updateDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma', editTopic.id), {
-          titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(),
+          titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(), sottoargomenti: modalSubs,
         });
       } else {
-        await addDoc(col, { titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(), createdAt: serverTimestamp() });
+        await addDoc(col, { titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(), sottoargomenti: [], createdAt: serverTimestamp() });
       }
       toast(editTopic ? 'Argomento aggiornato' : 'Argomento aggiunto', 'success');
       setShowTopicModal(false);
@@ -147,6 +191,164 @@ export default function ClasseDetail() {
       toast('Argomento eliminato', 'success');
       loadData();
     } catch { toast('Errore', 'error'); }
+  };
+
+  // ── Sottoargomenti ────────────────────────────────────────────────────────
+  const handleAddSub = async (topic) => {
+    const titolo = (subForm[topic.id] || '').trim();
+    if (!titolo) return;
+    const newSub = { id: crypto.randomUUID(), titolo };
+    const updated = [...(topic.sottoargomenti || []), newSub];
+    await updateDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma', topic.id), { sottoargomenti: updated });
+    setProgramma(p => p.map(t => t.id === topic.id ? { ...t, sottoargomenti: updated } : t));
+    setSubForm(f => ({ ...f, [topic.id]: '' }));
+    setAddingSubTo(null);
+  };
+
+  const handleDeleteSub = async (topic, subId) => {
+    const updated = (topic.sottoargomenti || []).filter(s => s.id !== subId);
+    await updateDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma', topic.id), { sottoargomenti: updated });
+    setProgramma(p => p.map(t => t.id === topic.id ? { ...t, sottoargomenti: updated } : t));
+  };
+
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const exportProgrammaPDF = () => {
+    const nomeCorso = (corso?.nomeCorso || 'Corso').toUpperCase();
+    const nomeClasse = classe?.nome || '';
+    const istituzione = classe?.istituzione || '';
+    const docente = user?.displayName || '';
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = 210, pageH = 297;
+    const mX = 20, mTop = 22, mBottom = 22;
+    const contentW = pageW - mX * 2;
+    let y = mTop;
+    let pageNum = 1;
+
+    const stampaPaginaNum = () => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(180, 180, 180);
+      doc.text(String(pageNum), pageW / 2, pageH - 10, { align: 'center' });
+    };
+
+    const nuovaPagina = () => {
+      stampaPaginaNum();
+      doc.addPage();
+      pageNum++;
+      y = mTop;
+    };
+
+    const checkY = (needed) => { if (y + needed > pageH - mBottom) nuovaPagina(); };
+
+    // ── Intestazione ──────────────────────────────────────────
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(12);
+    doc.setTextColor(120, 120, 120);
+    doc.text('Programma didattico', mX, y);
+    y += 11;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.setTextColor(17, 17, 17);
+    doc.text(nomeCorso, mX, y);
+    y += 9;
+
+    doc.setFontSize(11);
+    doc.setTextColor(60, 60, 60);
+    if (nomeClasse || istituzione) {
+      const val = [nomeClasse, istituzione].filter(Boolean).join(' · ');
+      doc.setFont('helvetica', 'italic'); doc.text('Classe: ', mX, y);
+      doc.setFont('helvetica', 'bold'); doc.text(val, mX + doc.getTextWidth('Classe: '), y);
+      y += 6;
+    }
+    if (docente) {
+      doc.setFont('helvetica', 'italic'); doc.text('Docente: ', mX, y);
+      doc.setFont('helvetica', 'bold'); doc.text(docente, mX + doc.getTextWidth('Docente: '), y);
+      y += 6;
+    }
+
+    y += 2;
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2);
+    doc.line(mX, y, pageW - mX, y);
+    y += 10;
+
+    // ── Argomenti ─────────────────────────────────────────────
+    const numColW = 8;   // colonna numero più stretta → lista più a sinistra
+    const titleX = mX + numColW + 2;
+    const titleW = contentW - numColW - 2;
+    const subIndent = titleX + 8;
+    const subNumColW = 12;
+
+    programma.forEach((topic, i) => {
+      const subs = topic.sottoargomenti || [];
+      const numStr = `${i + 1}.`;
+
+      doc.setFontSize(10.5);
+      const descLines = topic.descrizione ? doc.splitTextToSize(topic.descrizione, titleW) : [];
+      const blockH = 8 + (descLines.length > 0 ? descLines.length * 5 + 2 : 0) + subs.length * 6 + 6;
+      checkY(blockH);
+
+      // numero (allineato a destra nella colonna) + titolo
+      doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.setTextColor(17, 17, 17);
+      doc.text(numStr, mX + numColW, y, { align: 'right' });
+      doc.text(topic.titolo, titleX, y);
+      y += 4.5;
+
+      // descrizione
+      if (descLines.length > 0) {
+        doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(140, 140, 140);
+        doc.text(descLines, titleX, y);
+        y += descLines.length * 5 + 1;
+      }
+
+      // sottoargomenti
+      if (subs.length > 0) {
+        y += 1;
+        subs.forEach((sub, si) => {
+          checkY(6.5);
+          const subNumStr = `${i + 1}.${si + 1}`;
+          doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(90, 90, 90);
+          doc.text(subNumStr, subIndent + subNumColW, y, { align: 'right' });
+          doc.setFont('helvetica', 'normal'); doc.setTextColor(34, 34, 34);
+          doc.text(sub.titolo, subIndent + subNumColW + 2, y);
+          y += 6;
+        });
+      }
+      y += 6;
+    });
+
+    stampaPaginaNum();
+
+    // anteprima in modale inline
+    const pdfBlob = doc.output('blob');
+    const url = URL.createObjectURL(pdfBlob);
+    setPdfPreviewUrl(url);
+  };
+
+
+  const handleReorderTopics = async ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = programma.findIndex(t => t.id === active.id);
+    const newIndex = programma.findIndex(t => t.id === over.id);
+    const reordered = arrayMove(programma, oldIndex, newIndex);
+    setProgramma(reordered);
+    const batch = writeBatch(db);
+    reordered.forEach((t, i) => {
+      batch.update(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma', t.id), { ordine: i });
+    });
+    await batch.commit();
+  };
+
+  const handleSaveEditSub = async (topic, subId) => {
+    const titolo = editSubValue.trim();
+    if (!titolo) return;
+    const updated = (topic.sottoargomenti || []).map(s => s.id === subId ? { ...s, titolo } : s);
+    await updateDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma', topic.id), { sottoargomenti: updated });
+    setProgramma(p => p.map(t => t.id === topic.id ? { ...t, sottoargomenti: updated } : t));
+    setEditingSub(null);
+    setEditSubValue('');
   };
 
   // ── Studenti ───────────────────────────────────────────────────────────────
@@ -267,18 +469,13 @@ export default function ClasseDetail() {
   return (
     <div className="page fade-in" style={{ paddingTop: 0 }}>
       {/* ── Breadcrumb + Header ───────────────────────────────── */}
-      <div style={{ paddingTop: 24, paddingBottom: 0 }}>
+      <div style={{ paddingTop: 24, paddingBottom: 0, position: 'sticky', top: 0, zIndex: 100, background: 'var(--bg)', marginLeft: -28, marginRight: -28, paddingLeft: 28, paddingRight: 28 }}>
         <Link to={`/corsi/${corsoId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-2)', textDecoration: 'none', marginBottom: 12 }}>
           <ChevronLeft size={16} /> Torna al Corso
         </Link>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: 'var(--text)' }}>{corso?.nomeCorso}</h1>
-            <span style={{
-              fontSize: 12, fontWeight: 700, letterSpacing: '0.05em',
-              background: 'var(--accent)15', color: 'var(--accent)',
-              border: '1px solid var(--accent)30', borderRadius: 6, padding: '4px 10px',
-            }}>{code}</span>
             {classe && (
               <span style={{
                 fontSize: 14, fontWeight: 600,
@@ -320,6 +517,11 @@ export default function ClasseDetail() {
               <div className="card" style={{ padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button className="btn btn-primary btn-sm" onClick={openNewTopic}>+ Nuovo Argomento</button>
                 <span style={{ color: 'var(--text-3)', fontSize: 13, marginLeft: 'auto' }}>{programma.length} {programma.length === 1 ? 'argomento' : 'argomenti'} in programma</span>
+                {programma.length > 0 && (
+                  <button className="btn btn-secondary btn-sm" onClick={exportProgrammaPDF} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Download size={14} /> Esporta PDF
+                  </button>
+                )}
               </div>
               {programma.length === 0 ? (
                 <div className="empty-state">
@@ -327,29 +529,124 @@ export default function ClasseDetail() {
                   <div className="empty-state-title">Nessun argomento</div>
                   <div className="empty-state-text">Aggiungi gli argomenti del programma didattico.</div>
                 </div>
-              ) : programma.map((topic, i) => {
-                const lezioniTopic = lezioni.filter(l => l.argomentoId === topic.id);
-                const svolta = lezioniTopic.some(l => new Date(l.data) < now);
-                return (
-                  <div key={topic.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-3)', minWidth: 24 }}>{i + 1}.</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: lezioniTopic.length ? 2 : 0 }}>{topic.titolo}</div>
-                      {topic.descrizione && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{topic.descrizione}</div>}
-                      {lezioniTopic.length > 0 && (
-                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-                          {lezioniTopic.length} {lezioniTopic.length === 1 ? 'lezione' : 'lezioni'}
-                        </div>
-                      )}
-                    </div>
-                    {svolta && <span className="badge badge-success" style={{ fontSize: 11 }}>Svolta</span>}
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => openEditTopic(topic)} title="Modifica"><Edit2 size={15} /></button>
-                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleDeleteTopic(topic)} title="Elimina"><Trash2 size={15} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+              ) : (
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleReorderTopics}>
+                  <SortableContext items={programma.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                    {programma.map((topic, i) => {
+                      const lezioniTopic = lezioni.filter(l => l.argomentoId === topic.id);
+                      const expanded = expandedTopics[topic.id];
+                      const subs = topic.sottoargomenti || [];
+                      return (
+                        <SortableTopicCard key={topic.id} id={topic.id}>
+                          {({ dragHandleProps }) => (<>
+                            {/* Header argomento */}
+                            <div style={{ display: 'flex', alignItems: 'stretch', gap: 14, padding: '14px 18px', cursor: 'pointer' }}
+                              onClick={() => setExpandedTopics(e => ({ ...e, [topic.id]: !e[topic.id] }))}>
+                              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'stretch' }}>
+                                <span {...dragHandleProps} onClick={e => e.stopPropagation()} style={{ cursor: 'grab', color: 'var(--text-3)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                                  <GripVertical size={16} />
+                                </span>
+                                {expanded ? <ChevronDown size={17} strokeWidth={2.5} color="#0d9488" /> : <ChevronRight size={17} strokeWidth={2.5} color="#0d9488" />}
+                                <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', display: 'inline-block', flexShrink: 0 }} />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                {/* Badge | divisore | titolo + descrizione */}
+                                <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+                                  <span style={{
+                                    fontSize: 12, fontWeight: 700, color: '#fff',
+                                    background: '#0d9488', borderRadius: 6,
+                                    width: 36, height: 36, display: 'inline-flex',
+                                    alignItems: 'center', justifyContent: 'center', flexShrink: 0, alignSelf: 'center',
+                                  }}>{i + 1}</span>
+                                  <div style={{ width: 14, flexShrink: 0 }} />
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    {/* Riga 1: titolo + matita */}
+                                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1.2 }}>
+                                      {topic.titolo}
+                                      <button title="Modifica argomento" style={{
+                                        width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                                        background: 'rgba(13,148,136,0.12)', border: 'none',
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', color: '#0d9488'
+                                      }} onClick={e => { e.stopPropagation(); openEditTopic(topic); }}><Edit2 size={12} /></button>
+                                    </div>
+                                    {/* Riga 2: descrizione */}
+                                    <div style={{ fontSize: 12, fontWeight: 400, marginTop: 3, color: topic.descrizione ? 'var(--text-2)' : 'var(--text-3)', fontStyle: topic.descrizione ? 'normal' : 'italic', lineHeight: 1.3 }}>
+                                      {topic.descrizione || 'Scrivi qui la descrizione dell\'argomento'}
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Riga 3: info badge — indentata per allinearsi con il testo */}
+                                <div style={{ marginTop: 10, paddingLeft: 65, display: 'flex', gap: 12, alignItems: 'center' }}>
+                                  {subs.length > 0 && (
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#0d9488', background: 'rgba(13,148,136,0.1)', borderRadius: 4, padding: '1px 7px' }}>
+                                      {subs.length} {subs.length === 1 ? 'sottoargomento' : 'sottoargomenti'}
+                                    </span>
+                                  )}
+                                  {lezioniTopic.length > 0 && (
+                                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
+                                      {lezioniTopic.length} {lezioniTopic.length === 1 ? 'lezione' : 'lezioni'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div onClick={e => e.stopPropagation()}>
+                                <button title="Elimina argomento" style={{
+                                  width: 28, height: 28, borderRadius: '50%',
+                                  background: 'rgba(239,68,68,0.12)', border: 'none',
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  cursor: 'pointer', color: '#ef4444'
+                                }} onClick={() => handleDeleteTopic(topic)}><Trash2 size={14} /></button>
+                              </div>
+                            </div>
+
+                            {/* Sottoargomenti */}
+                            {expanded && (
+                              <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', padding: '10px 18px 14px 120px' }}>
+                                {subs.map((sub, si) => {
+                                  const isLast = si === subs.length - 1;
+                                  return (
+                                    <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+                                      <div style={{ position: 'absolute', left: -24, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: '#0d9488', opacity: 0.25 }} />
+                                      <div style={{ position: 'absolute', left: -24, top: '50%', width: 24, height: 2, background: '#0d9488', opacity: 0.25 }} />
+                                      <span style={{
+                                        fontSize: 11, fontWeight: 600, color: '#0d9488',
+                                        border: '1.5px solid #0d9488', borderRadius: 6,
+                                        width: 32, height: 32, display: 'inline-flex',
+                                        alignItems: 'center', justifyContent: 'center',
+                                        flexShrink: 0, background: 'transparent', margin: '5px 0'
+                                      }}>{i + 1}.{si + 1}</span>
+                                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', flex: 1 }}>{sub.titolo}</span>
+                                    </div>
+                                  );
+                                })}
+                                {addingSubTo === topic.id ? (
+                                  <div style={{ display: 'flex', gap: 8, marginTop: subs.length ? 10 : 4, alignItems: 'center' }}>
+                                    <input autoFocus className="form-input"
+                                      style={{ flex: 1, padding: '5px 10px', fontSize: 13, margin: 0 }}
+                                      placeholder="Titolo sottoargomento..."
+                                      value={subForm[topic.id] || ''}
+                                      onChange={e => setSubForm(f => ({ ...f, [topic.id]: e.target.value }))}
+                                      onKeyDown={e => { if (e.key === 'Enter') handleAddSub(topic); if (e.key === 'Escape') setAddingSubTo(null); }}
+                                    />
+                                    <button className="btn btn-primary btn-sm" onClick={() => handleAddSub(topic)}>Aggiungi</button>
+                                    <button className="btn btn-secondary btn-sm" onClick={() => setAddingSubTo(null)}>Annulla</button>
+                                  </div>
+                                ) : (
+                                  <button className="btn btn-ghost btn-sm" style={{ marginTop: subs.length ? 10 : 4, color: 'var(--accent)', fontSize: 12 }}
+                                    onClick={() => setAddingSubTo(topic.id)}>
+                                    <Plus size={13} /> Aggiungi sottoargomento
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>)}
+                        </SortableTopicCard>
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
+              )}
             </div>
           )}
 
@@ -372,7 +669,8 @@ export default function ClasseDetail() {
                 const meseLbl = format(d, 'MMM', { locale: it }).toUpperCase();
                 const giornoNum = format(d, 'dd');
                 const argomento = lez.argomentoId ? programma.find(p => p.id === lez.argomentoId) : null;
-                const titolo = argomento?.titolo || lez.note || 'Lezione';
+                const sottoargomento = lez.sottoargomentoId && argomento ? (argomento.sottoargomenti || []).find(s => s.id === lez.sottoargomentoId) : null;
+                const titolo = sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
                 return (
                   <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
                     <div style={{
@@ -456,6 +754,11 @@ export default function ClasseDetail() {
           {/* PRESENZE */}
           {tab === 'presenze' && (
             <PresenzeTab corsoId={corsoId} classeId={classeId} studenti={studenti} />
+          )}
+
+          {/* VOTI */}
+          {tab === 'voti' && (
+            <VotiTab corsoId={corsoId} classeId={classeId} studenti={studenti} />
           )}
 
           {/* ESERCITAZIONI */}
@@ -696,6 +999,38 @@ export default function ClasseDetail() {
         </Modal>
       )}
 
+      {/* Modale anteprima PDF */}
+      {pdfPreviewUrl && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }} onClick={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }}>
+          <div style={{
+            background: 'var(--surface)', borderRadius: 16, overflow: 'hidden',
+            width: '70vw', height: '90vh',
+            display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+          }} onClick={e => e.stopPropagation()}>
+            {/* Header modale */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>Anteprima Programma</span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <a href={pdfPreviewUrl} download={`Programma_${corso?.nomeCorso || 'Corso'}.pdf`}
+                  className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+                  <Download size={14} /> Scarica PDF
+                </a>
+                <button className="btn btn-secondary btn-sm" onClick={() => { URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(null); }}>
+                  Chiudi
+                </button>
+              </div>
+            </div>
+            {/* Iframe PDF */}
+            <iframe src={pdfPreviewUrl} style={{ flex: 1, border: 'none', width: '100%' }} title="Anteprima PDF" />
+          </div>
+        </div>
+      )}
+
       {showTopicModal && (
         <Modal
           title={editTopic ? 'Modifica Argomento' : 'Nuovo Argomento'}
@@ -714,8 +1049,54 @@ export default function ClasseDetail() {
           </div>
           <div className="form-group">
             <label className="form-label">Descrizione</label>
-            <textarea className="form-input" rows={3} placeholder="Dettagli dell'argomento..."
+            <textarea className="form-input" rows={2} placeholder="Dettagli dell'argomento..."
               value={topicForm.descrizione} onChange={e => setTopicForm(f => ({ ...f, descrizione: e.target.value }))} />
+          </div>
+
+          {/* Sottoargomenti */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 4 }}>
+            <label className="form-label" style={{ marginBottom: 10 }}>Sottoargomenti</label>
+            {modalSubs.length > 0 && (
+              <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
+                if (!over || active.id === over.id) return;
+                const oldIdx = modalSubs.findIndex(s => s.id === active.id);
+                const newIdx = modalSubs.findIndex(s => s.id === over.id);
+                setModalSubs(p => arrayMove(p, oldIdx, newIdx));
+              }}>
+                <SortableContext items={modalSubs.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                    {modalSubs.map((s, si) => (
+                      <SortableSubItem key={s.id} id={s.id}>
+                        {({ dragHandleProps }) => (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '6px 10px' }}>
+                            <span {...dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}><GripVertical size={14} /></span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#0d9488', minWidth: 22 }}>{si + 1}.</span>
+                            <input className="form-input" style={{ flex: 1, padding: '4px 8px', fontSize: 13, margin: 0, fontWeight: 500 }}
+                              value={s.titolo}
+                              onChange={e => setModalSubs(p => p.map(x => x.id === s.id ? { ...x, titolo: e.target.value } : x))} />
+                            <button style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(239,68,68,0.12)', border: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', flexShrink: 0 }}
+                              onClick={() => setModalSubs(p => p.filter(x => x.id !== s.id))}><Trash2 size={11} /></button>
+                          </div>
+                        )}
+                      </SortableSubItem>
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="form-input" style={{ flex: 1, margin: 0 }} placeholder="Aggiungi sottoargomento..."
+                value={modalSubInput} onChange={e => setModalSubInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && modalSubInput.trim()) {
+                    setModalSubs(p => [...p, { id: crypto.randomUUID(), titolo: modalSubInput.trim() }]);
+                    setModalSubInput('');
+                  }
+                }} />
+              <button className="btn btn-secondary" onClick={() => { if (modalSubInput.trim()) { setModalSubs(p => [...p, { id: crypto.randomUUID(), titolo: modalSubInput.trim() }]); setModalSubInput(''); } }}>
+                <Plus size={14} /> Aggiungi
+              </button>
+            </div>
           </div>
         </Modal>
       )}
