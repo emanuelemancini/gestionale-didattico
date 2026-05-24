@@ -200,7 +200,7 @@ export default function Corsi() {
         title="Tutti i Corsi"
         subtitle="Panoramica dei tuoi corsi attivi con le classi assegnate."
         actions={
-          <button className="btn btn-primary" onClick={openCreate}>+ Nuovo Corso</button>
+          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi corso</button>
         }
       />
       <div className="page fade-in">

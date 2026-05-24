@@ -305,8 +305,9 @@ export default function AdminUsers({ adminEmail }) {
           footer={
             dialogConfig.onConfirm ? (
               <>
-                <button className="btn btn-secondary" onClick={() => setDialogConfig(null)}>Annulla</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setDialogConfig(null)}>Annulla</button>
                 <button
+                  type="button"
                   className={dialogConfig.confirmDanger ? 'btn btn-danger' : 'btn btn-primary'}
                   onClick={dialogConfig.onConfirm}
                 >
@@ -314,7 +315,7 @@ export default function AdminUsers({ adminEmail }) {
                 </button>
               </>
             ) : (
-              <button className="btn btn-primary" onClick={() => setDialogConfig(null)}>
+              <button type="button" className="btn btn-primary" onClick={() => setDialogConfig(null)}>
                 {dialogConfig.confirmLabel || 'Chiudi'}
               </button>
             )

@@ -117,7 +117,7 @@ export default function Classi() {
         title="Tutte le Classi"
         subtitle="Gestisci le classi con i relativi studenti iscritti."
         actions={
-          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi Classe</button>
+          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi classe</button>
         }
       />
       <div className="page fade-in">

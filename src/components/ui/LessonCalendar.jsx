@@ -732,7 +732,7 @@ export default function LessonCalendar({ lezioni = [], onAdd, onEdit, onDelete, 
           ))}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginLeft:'auto' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => { const t = new Date(); setCurrent(t); onMonthChange?.(t); }} style={{ fontSize:12, padding:'4px 10px', border:'1px solid color-mix(in srgb, var(--accent) 40%, transparent)' }}>Oggi</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { const t = new Date(); setCurrent(t); onMonthChange?.(t); onDaySelect?.(t); }} style={{ fontSize:12, padding:'4px 10px', border:'1px solid color-mix(in srgb, var(--accent) 40%, transparent)' }}>Oggi</button>
           <div style={{ display:'flex', alignItems:'center', background:'color-mix(in srgb, var(--accent) 8%, var(--surface))', border:'1px solid color-mix(in srgb, var(--accent) 30%, transparent)', borderRadius:10, overflow:'hidden' }}>
             <button className="icon-btn" onClick={() => navigate(-1)} style={{ borderRadius:0, borderRight:'1px solid color-mix(in srgb, var(--accent) 20%, transparent)', color:'var(--accent)' }}><ChevronLeft size={16} /></button>
             <span style={{ fontSize:14, fontWeight:700, color:'var(--accent)', padding:'0 16px', whiteSpace:'nowrap', textTransform:'capitalize', minWidth:200, textAlign:'center', display:'inline-block' }}>{periodLabel()}</span>

@@ -19,6 +19,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { format, isToday, isTomorrow, addDays, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { courseColor } from '../../utils/colors';
+import { isItalianHoliday } from '../../utils/italianHolidays';
 
 function DayContextMenu({ x, y, onEdit, onDelete, onClose }) {
   useEffect(() => {
@@ -292,6 +293,7 @@ export default function Dashboard() {
   }
 
   const dayLezioni = lezioni.filter(l => isSameDay(l.dataDate, selectedDay)).sort((a, b) => a.oraInizio.localeCompare(b.oraInizio));
+  const isDayHoliday = selectedDay.getDay() === 0 || isItalianHoliday(selectedDay);
 
   // ── Drag-to-reschedule per il pannello giornaliero ──────────────────────────
   const dayColRef  = useRef(null);
@@ -436,12 +438,16 @@ export default function Dashboard() {
     { id:'calendario',  label:'Calendario',       icon:<CalendarDays size={15}/> },
     { id:'prossime',    label:'Prossime lezioni',  icon:<AlarmClock size={15}/> },
     { id:'scadenze',    label:'Scadenze',          icon:<Clock size={15}/> },
-    { id:'accesso',     label:'Accesso rapido',    icon:<LayoutGrid size={15}/> },
   ];
 
   // Lezioni prossimi 14 giorni (per tab dedicata)
   const lessonProssime14 = lezioni
     .filter(l => l.dataDate >= new Date() && l.dataDate < addDays(new Date(), 14))
+    .sort((a, b) => a.dataDate - b.dataDate || a.oraInizio.localeCompare(b.oraInizio));
+
+  // Lezioni extra (giorni 14-18) sbiadite
+  const lessonExtra = lezioni
+    .filter(l => l.dataDate >= addDays(new Date(), 14) && l.dataDate < addDays(new Date(), 18))
     .sort((a, b) => a.dataDate - b.dataDate || a.oraInizio.localeCompare(b.oraInizio));
 
   return (
@@ -452,7 +458,7 @@ export default function Dashboard() {
       />
 
       {/* ── Tab bar ── */}
-      <div style={{ display:'flex', gap:2, padding:'0 24px', borderBottom:'1px solid var(--border)', marginBottom:0, background:'var(--surface)', position:'sticky', top:0, zIndex:40 }}>
+      <div style={{ display:'flex', gap:2, padding:'0 24px', borderBottom:'1px solid var(--border)', marginBottom:0, background:'var(--surface)', position:'sticky', top:0, zIndex:40, scrollbarGutter:'stable' }}>
         {TABS.map(t => (
           <button
             key={t.id}
@@ -461,7 +467,7 @@ export default function Dashboard() {
               display:'flex', alignItems:'center', gap:7,
               padding:'11px 16px',
               border:'none', background:'none', cursor:'pointer',
-              fontSize:13, fontWeight: activeTab === t.id ? 700 : 500,
+              fontSize:15, fontWeight: activeTab === t.id ? 700 : 500,
               color: activeTab === t.id ? 'var(--accent)' : 'var(--text-2)',
               borderBottom: activeTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
               marginBottom:-1, transition:'color 0.15s',
@@ -469,11 +475,16 @@ export default function Dashboard() {
             }}
           >
             {t.icon} {t.label}
+            {t.id === 'prossime' && lessonProssime14.length > 0 && (
+              <span style={{ fontSize:10, fontWeight:700, background:'var(--accent)', color:'#fff', borderRadius:20, padding:'1px 6px', marginLeft:2, marginBottom:2 }}>
+                {lessonProssime14.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      <div className="page fade-in" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div className="page fade-in" style={{ display:'flex', flexDirection:'column', gap:16, paddingTop: (activeTab === 'calendario' || activeTab === 'prossime') ? 16 : 28 }}>
 
         {/* ══ TAB: CALENDARIO ══ */}
         {activeTab === 'calendario' && (
@@ -489,7 +500,7 @@ export default function Dashboard() {
           <div style={{ display:'flex', flexDirection:'column', minHeight:0 }}>
 
             {/* Pannello lezioni del giorno — vista oraria 9:00–19:00 */}
-            <div className="card" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, padding:0, overflow:'hidden', background:'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
+            <div className="card" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, padding:0, overflow:'hidden', background: isDayHoliday ? 'color-mix(in srgb, var(--danger) 4%, var(--surface))' : 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
               <div style={{ padding:'12px 14px', borderBottom:'1px solid color-mix(in srgb, #fff 20%, var(--accent))', flexShrink:0, background:'var(--accent)', height:97, boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
                 {/* Riga superiore: titolo */}
                 <span style={{ fontSize:13, fontWeight:800, color:'rgba(255,255,255,0.7)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Orario giornaliero</span>
@@ -572,19 +583,18 @@ export default function Dashboard() {
                     );
                   })()}
 
-                  {/* Overlay giorno libero */}
+                  {/* Overlay giorno libero / festivo */}
                   {dayLezioni.length === 0 && (
                     <div style={{
                       position:'absolute', top:0, left:0, right:0, bottom:0,
-                      background:'rgba(255,255,255,0.82)',
-                      backdropFilter:'blur(2px)',
+                      background:'transparent',
                       display:'flex', flexDirection:'column',
                       alignItems:'center', justifyContent:'center',
                       paddingLeft:32,
                       gap:8, zIndex:5, borderRadius:8,
                     }}>
-                      <CalendarDays size={32} style={{ color:'var(--text-3)', opacity:0.5 }} />
-                      <span style={{ fontSize:13, fontWeight:600, color:'var(--text-2)' }}>Giorno libero</span>
+                      <CalendarDays size={32} style={{ color: isDayHoliday ? 'var(--danger)' : 'var(--text-3)', opacity:0.5 }} />
+                      <span style={{ fontSize:13, fontWeight:600, color: isDayHoliday ? 'var(--danger)' : 'var(--text-2)' }}>{isDayHoliday ? 'Giorno festivo' : 'Giorno libero'}</span>
                     </div>
                   )}
                   {(() => {
@@ -727,22 +737,32 @@ export default function Dashboard() {
 
         {/* ══ TAB: PROSSIME LEZIONI ══ */}
         {activeTab === 'prossime' && (() => {
-          // Raggruppa per giorno
+          // Raggruppa per giorno (normali)
           const giorni = [];
           lessonProssime14.forEach(l => {
             const key = format(l.dataDate, 'yyyy-MM-dd');
             const g = giorni.find(x => x.key === key);
             if (g) g.lezioni.push(l);
-            else giorni.push({ key, date: l.dataDate, lezioni: [l] });
+            else giorni.push({ key, date: l.dataDate, lezioni: [l], faded: false });
+          });
+
+          // Giorni extra sbiaditi (14-18)
+          lessonExtra.forEach(l => {
+            const key = format(l.dataDate, 'yyyy-MM-dd');
+            const g = giorni.find(x => x.key === key);
+            if (g) g.lezioni.push(l);
+            else giorni.push({ key, date: l.dataDate, lezioni: [l], faded: true });
           });
 
           const oggi = new Date(); oggi.setHours(0,0,0,0);
           const fine14 = addDays(oggi, 14);
+          const normalCount = giorni.filter(g => !g.faded).length;
+          const showFadedDivider = giorni.some(g => g.faded);
 
           return (
             <div>
               {/* Calendario orizzontale sticky */}
-              <div style={{ position:'sticky', top:64, zIndex:10, marginBottom:20, background:'var(--bg)', paddingTop:4, paddingBottom:4 }}>
+              <div style={{ position:'sticky', top:64, zIndex:150, paddingTop:0, paddingBottom:0, background:'var(--bg)' }}>
                 <ProssimeStrip
                   lezioni={lezioni}
                   selectedDay={prossimeActiveDay}
@@ -755,7 +775,6 @@ export default function Dashboard() {
                       const OFFSET = 64 + 72 + 12;
                       const top = el.getBoundingClientRect().top + window.scrollY - OFFSET;
                       window.scrollTo({ top, behavior: 'smooth' });
-                      // Glow sulla prima card del giorno (utile quando lo scroll non ha spazio sufficiente)
                       setTimeout(() => {
                         const firstCard = el.querySelector('[data-color]');
                         if (firstCard) {
@@ -775,19 +794,12 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* Conteggio */}
-              <div style={{ display:'flex', alignItems:'center', marginBottom:20 }}>
-                <span className="badge badge-blue" style={{ marginLeft:'auto' }}>
-                  {lessonProssime14.length} {lessonProssime14.length === 1 ? 'lezione' : 'lezioni'} nei prossimi 14 giorni
-                </span>
-              </div>
-
               {loading ? (
-                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                <div style={{ display:'flex', flexDirection:'column', gap:10, paddingTop:16 }}>
                   {[...Array(4)].map((_,i) => <div key={i} className="skeleton" style={{ height:100, borderRadius:14 }} />)}
                 </div>
-              ) : lessonProssime14.length === 0 ? (
-                <div className="card">
+              ) : lessonProssime14.length === 0 && lessonExtra.length === 0 ? (
+                <div className="card" style={{ marginTop:16 }}>
                   <div className="empty-state">
                     <div className="empty-state-icon"><CalendarDays size={40} /></div>
                     <div className="empty-state-title">Nessuna lezione in programma</div>
@@ -795,20 +807,36 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-                  {giorni.map(({ key, date, lezioni: gl }) => {
+                <div style={{ display:'flex', flexDirection:'column', gap:20, paddingTop:16 }}>
+                  {giorni.map(({ key, date, lezioni: gl, faded }, dayIdx) => {
                     const isOggi = isToday(date);
                     const isDom  = isTomorrow(date);
-                    const labelGiorno = isOggi
-                      ? 'Oggi'
-                      : isDom
-                      ? 'Domani'
-                      : format(date, 'EEEE d MMMM', { locale: it });
+                    const labelGiorno = isOggi ? 'Oggi' : isDom ? 'Domani' : format(date, 'EEEE d MMMM', { locale: it });
+                    // Divider "lezioni oltre i 14 giorni"
+                    const showFadedDividerHere = faded && dayIdx > 0 && !giorni[dayIdx - 1].faded;
+                    // Divider mese
+                    const prevDate = dayIdx > 0 ? giorni[dayIdx - 1].date : null;
+                    const showMonthDivider = prevDate && format(date, 'yyyy-MM') !== format(prevDate, 'yyyy-MM');
                     return (
-                      <div key={key} id={`day-${key}`}>
+                      <div key={key}>
+                        {showFadedDividerHere && (
+                          <div style={{ display:'flex', alignItems:'center', gap:12, margin:'4px 0 20px', opacity:0.6 }}>
+                            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                            <span style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.08em', whiteSpace:'nowrap' }}>Lezioni oltre i 14 giorni</span>
+                            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                          </div>
+                        )}
+                        {showMonthDivider && !showFadedDividerHere && (
+                          <div style={{ display:'flex', alignItems:'center', gap:12, margin:'4px 0 20px' }}>
+                            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                            <span style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.08em' }}>{format(date, 'MMMM yyyy', { locale: it }).toUpperCase()}</span>
+                            <div style={{ flex:1, height:1, background:'var(--border)' }} />
+                          </div>
+                        )}
+                      <div id={`day-${key}`} style={{ opacity: faded ? 0.35 : 1, pointerEvents: faded ? 'none' : undefined }}>
                         {/* Card lezioni */}
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10 }}>
-                          {gl.map(l => {
+                          {gl.map((l, lIdx) => {
                             const color = lessonColor(l);
                             const toMin = t => { const [h, m] = (t||'09:00').split(':').map(Number); return h*60+m; };
                             const dur = toMin(l.oraFine) - toMin(l.oraInizio);
@@ -819,6 +847,7 @@ export default function Dashboard() {
                             const courseAll = lezioni.filter(ll => (ll.corsoId || ll.nomeCorso) === (l.corsoId || l.nomeCorso) && ll.classeId === l.classeId).sort((a,b) => a.dataDate - b.dataDate || a.oraInizio.localeCompare(b.oraInizio));
                             const lessonIdx = courseAll.findIndex(ll => ll.id === l.id) + 1;
                             const isActive  = isOggi && (() => { const now = new Date().getHours()*60+new Date().getMinutes(); return now >= toMin(l.oraInizio) && now < toMin(l.oraFine); })();
+                            const isFirstCard = dayIdx === 0 && lIdx === 0;
 
                             return (
                               <div
@@ -833,6 +862,7 @@ export default function Dashboard() {
                                   boxShadow: isActive ? `0 0 0 2px ${color}` : 'var(--shadow)',
                                   display:'flex',
                                   overflow:'hidden',
+                                  minHeight: isFirstCard ? 97 : undefined,
                                 }}
                               >
                                 {/* Colonna data */}
@@ -932,12 +962,13 @@ export default function Dashboard() {
                                     >{a.icon}{a.label}</button>
                                   ))}
                                 </div>
-                                </div>{/* fine contenuto principale */}
+                                </div>
                               </div>
                             );
                           })}
                         </div>
                       </div>
+                    </div>
                     );
                   })}
                 </div>
@@ -997,34 +1028,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ══ TAB: ACCESSO RAPIDO ══ */}
-        {activeTab === 'accesso' && (
-          <div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:12 }}>
-              {[
-                { to:'/classi',      icon:<GraduationCap size={28}/>, label:'Classi',      sub:`${stats.classi} classi attive`,   bg:'rgba(79,142,247,0.12)',   color:'#4f8ef7' },
-                { to:'/corsi',       icon:<BarChart3 size={28}/>,     label:'Corsi',        sub:'Gestisci i tuoi corsi',           bg:'rgba(139,92,246,0.12)',   color:'#8b5cf6' },
-                { to:'/economia',    icon:<Wallet size={28}/>,         label:'Economia',     sub:'Compensi e tariffe',              bg:'rgba(16,185,129,0.12)',   color:'var(--success)' },
-                { to:'/statistiche', icon:<BarChart3 size={28}/>,     label:'Statistiche',  sub:'Report e analisi dettagliate',    bg:'rgba(245,158,11,0.12)',   color:'var(--warning)' },
-                { to:'/mailing',     icon:<Mail size={28}/>,           label:'Mailing',      sub:'Invia comunicazioni',             bg:'rgba(244,63,94,0.12)',    color:'var(--danger)' },
-                { to:'/database',    icon:<GraduationCap size={28}/>,  label:'Database',     sub:`${stats.studenti} studenti`,      bg:'rgba(6,182,212,0.12)',    color:'#06b6d4' },
-                { to:'/archivio',    icon:<Zap size={28}/>,            label:'Archivio',     sub:'Corsi archiviati',                bg:'rgba(107,114,128,0.12)', color:'var(--text-2)' },
-              ].map(({ to, icon, label, sub, bg, color }) => (
-                <Link key={to} to={to} style={{ textDecoration:'none' }}>
-                  <div className="card card-hover" style={{ display:'flex', alignItems:'center', gap:16, padding:'16px 18px', cursor:'pointer' }}>
-                    <div style={{ width:52, height:52, borderRadius:14, background:bg, color, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      {icon}
-                    </div>
-                    <div>
-                      <div style={{ fontSize:15, fontWeight:700, color:'var(--text)', marginBottom:2 }}>{label}</div>
-                      <div style={{ fontSize:12, color:'var(--text-2)' }}>{sub}</div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
 
       </div>
 
