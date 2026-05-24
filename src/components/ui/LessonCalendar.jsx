@@ -165,7 +165,7 @@ function MonthView({ current, lezioni, selectedDay, onDayClick, onLessonClick, o
           const dayLessons = byDay[key] || [];
           const inMonth    = isSameMonth(day, current);
           const today      = isToday(day);
-          const isSelected = selectedDay && isSameDay(day, selectedDay) && !today;
+          const isSelected = selectedDay && isSameDay(day, selectedDay);
           const isDropTarget = dragOver === key;
           const isHoliday = day.getDay() === 0 || isItalianHoliday(day);
           return (

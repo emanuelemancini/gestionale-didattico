@@ -662,7 +662,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .cal-day-cell:hover { background: var(--surface-el); }
 .cal-day-cell.other-month { opacity: 0.4; }
 .cal-day-cell.today { background: rgba(79,142,247,0.05); }
-.cal-day-cell.selected { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.cal-day-cell.selected { background: color-mix(in srgb, var(--accent) 8%, transparent); outline: 3px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: -3px; border-radius: 8px; }
 .cal-day-cell.drop-target { background: color-mix(in srgb, var(--accent) 15%, transparent); outline: 2px dashed var(--accent); outline-offset: -2px; }
 .cal-day-cell.holiday { background: color-mix(in srgb, var(--danger) 4%, transparent); }
 .cal-day-cell.holiday:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
