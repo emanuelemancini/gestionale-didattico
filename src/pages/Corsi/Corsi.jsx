@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
@@ -154,6 +154,15 @@ export default function Corsi() {
       };
       if (editCorso) {
         await updateDoc(doc(db, 'users', user.uid, 'corsi', editCorso.id), payload);
+        // Sync nomeCorso nelle lezioni collegate
+        if (form.nomeCorso !== editCorso.nomeCorso) {
+          const lezioniSnap = await getDocs(query(collection(db, 'users', user.uid, 'lezioni'), where('corsoId', '==', editCorso.id)));
+          if (!lezioniSnap.empty) {
+            const batch = writeBatch(db);
+            lezioniSnap.docs.forEach(d => batch.update(d.ref, { nomeCorso: form.nomeCorso }));
+            await batch.commit();
+          }
+        }
         toast('Corso aggiornato', 'success');
       } else {
         await addDoc(collection(db, 'users', user.uid, 'corsi'), {

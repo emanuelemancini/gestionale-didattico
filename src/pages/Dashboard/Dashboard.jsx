@@ -476,7 +476,12 @@ export default function Dashboard() {
           >
             {t.icon} {t.label}
             {t.id === 'prossime' && lessonProssime14.length > 0 && (
-              <span style={{ fontSize:10, fontWeight:700, background:'var(--accent)', color:'#fff', borderRadius:20, padding:'1px 6px', marginLeft:2, marginBottom:2 }}>
+              <span style={{
+                fontSize:11, fontWeight:700,
+                background: activeTab === 'prossime' ? 'var(--accent)' : 'var(--surface-el)',
+                color: activeTab === 'prossime' ? '#fff' : 'var(--text-2)',
+                borderRadius:20, padding:'1px 7px', minWidth:20, textAlign:'center',
+              }}>
                 {lessonProssime14.length}
               </span>
             )}
@@ -501,7 +506,7 @@ export default function Dashboard() {
 
             {/* Pannello lezioni del giorno — vista oraria 9:00–19:00 */}
             <div className="card" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, padding:0, overflow:'hidden', background: isDayHoliday ? 'color-mix(in srgb, var(--danger) 4%, var(--surface))' : 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
-              <div style={{ padding:'12px 14px', borderBottom:'1px solid color-mix(in srgb, #fff 20%, var(--accent))', flexShrink:0, background:'var(--accent)', height:97, boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+              <div style={{ padding:'12px 14px 5px', borderBottom:'1px solid color-mix(in srgb, #fff 20%, var(--accent))', flexShrink:0, background:'var(--accent)', height:97, boxSizing:'border-box', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
                 {/* Riga superiore: titolo */}
                 <span style={{ fontSize:13, fontWeight:800, color:'rgba(255,255,255,0.7)', textTransform:'uppercase', letterSpacing:'0.06em' }}>Orario giornaliero</span>
                 <div style={{ borderBottom:'1px solid rgba(255,255,255,0.2)', marginBottom:4 }} />
@@ -523,8 +528,8 @@ export default function Dashboard() {
                       {format(selectedDay, 'yyyy')}
                     </span>
                   </div>
-                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.9)', background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'2px 8px', letterSpacing:'0.02em' }}>
-                    {dayLezioni.length === 0 ? 'Nessuna lezione' : `${dayLezioni.length} ${dayLezioni.length === 1 ? 'lezione' : 'lezioni'}`}
+                  <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700, color:'rgba(255,255,255,0.9)', background:'rgba(255,255,255,0.18)', borderRadius:20, padding:'2px 8px', letterSpacing:'0.02em', marginBottom:2 }}>
+                    {`${dayLezioni.length} ${dayLezioni.length === 1 ? 'lezione' : 'lezioni'}`}
                   </span>
                 </div>
               </div>
@@ -626,7 +631,7 @@ export default function Dashboard() {
                     const startMin = toMin(l.oraInizio) - 9 * 60;
                     const endMin   = toMin(l.oraFine)   - 9 * 60;
                     const topPct    = `${(startMin / 600) * 100}%`;
-                    const heightPct = `max(5%, ${((endMin - startMin) / 600) * 100}%)`;
+                    const heightPct = `calc(max(5%, ${((endMin - startMin) / 600) * 100}%) - 5px)`;
                     const nowMin    = new Date().getHours() * 60 + new Date().getMinutes();
                     const isActive  = isToday(selectedDay) && nowMin >= toMin(l.oraInizio) && nowMin < toMin(l.oraFine);
                     const courseKey = l.corsoId || l.nomeCorso;
@@ -822,7 +827,7 @@ export default function Dashboard() {
                         {showFadedDividerHere && (
                           <div style={{ display:'flex', alignItems:'center', gap:12, margin:'4px 0 20px', opacity:0.6 }}>
                             <div style={{ flex:1, height:1, background:'var(--border)' }} />
-                            <span style={{ fontSize:10, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.08em', whiteSpace:'nowrap' }}>Lezioni oltre i 14 giorni</span>
+                            <span style={{ fontSize:11, fontWeight:800, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'0.1em', whiteSpace:'nowrap' }}>Lezioni oltre i 14 giorni</span>
                             <div style={{ flex:1, height:1, background:'var(--border)' }} />
                           </div>
                         )}
