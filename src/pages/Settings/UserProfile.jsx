@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { updateProfile, updateEmail, updatePassword } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -61,7 +61,7 @@ export default function UserProfile() {
         }
         await updateProfile(auth.currentUser, { displayName: name, photoURL: finalPhotoUrl });
         const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { displayName: name, photoURL: finalPhotoUrl });
+        await setDoc(userRef, { displayName: name, photoURL: finalPhotoUrl }, { merge: true });
         
         successes.push('Dati personali aggiornati.');
         setPhotoURL(finalPhotoUrl);
@@ -71,7 +71,7 @@ export default function UserProfile() {
       if (email !== user?.email) {
         await updateEmail(auth.currentUser, email);
         const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { email: email });
+        await setDoc(userRef, { email: email }, { merge: true });
         successes.push('Email aggiornata.');
       }
       
@@ -169,17 +169,17 @@ export default function UserProfile() {
                        <Upload size={16} /> Carica File
                     </button>
                     <span style={{ fontSize: 13, color: 'var(--text-3)' }}>oppure link URL:</span>
-                    <input 
-                      type="url" 
-                      className="form-input" 
-                      style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }} 
-                      placeholder="https://..." 
-                      value={photoURL} 
+                    <input
+                      type="url"
+                      className="form-input"
+                      style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                      placeholder="https://..."
+                      value={photoURL}
                       onChange={e => {
                         setPhotoURL(e.target.value);
                         setAvatarFile(null);
                         setPreviewUrl('');
-                      }} 
+                      }}
                     />
                   </div>
                 ) : (
