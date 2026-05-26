@@ -176,7 +176,7 @@ export default function ClasseDetail() {
           titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(), sottoargomenti: modalSubs,
         });
       } else {
-        await addDoc(col, { titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(), sottoargomenti: [], createdAt: serverTimestamp() });
+        await addDoc(col, { titolo: topicForm.titolo.trim(), descrizione: topicForm.descrizione.trim(), sottoargomenti: modalSubs, createdAt: serverTimestamp() });
       }
       toast(editTopic ? 'Argomento aggiornato' : 'Argomento aggiunto', 'success');
       setShowTopicModal(false);

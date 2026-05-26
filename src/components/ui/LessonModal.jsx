@@ -20,13 +20,13 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
   const [form, setForm] = useState({
     data:        defaultDate ? format(defaultDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
     oraInizio:   '09:00',
-    oraFine:     '11:00',
-    corsoId:     '',
-    nomeCorso:   '',
-    classeId:    '',
+    oraFine:     '15:00',
+    corsoId:     lesson?.corsoId || '',
+    nomeCorso:   lesson?.nomeCorso || '',
+    classeId:    lesson?.classeId || '',
     istituzione: '',
     note:        '',
-    durata:      120,
+    durata:      360,
     argomentoId: '',
     sottoargomentoId: '',
     ...(isEdit ? {
@@ -81,6 +81,14 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
       });
     return () => { cancelled = true; };
   }, [form.corsoId, form.classeId, user]);
+
+  // Risolve nomeCorso quando corsoId è precompilato ma nomeCorso non è ancora disponibile
+  useEffect(() => {
+    if (!isEdit && form.corsoId && !form.nomeCorso && corsi.length > 0) {
+      const corso = corsi.find(c => c.id === form.corsoId);
+      if (corso) set('nomeCorso', corso.nomeCorso);
+    }
+  }, [corsi, form.corsoId]);
 
   function handleCorsoChange(corsoId) {
     const corso = corsi.find(c => c.id === corsoId);
