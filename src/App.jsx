@@ -14,6 +14,7 @@ import ClasseOverview from './pages/Classi/ClasseOverview';
 import Corsi from './pages/Corsi/Corsi';
 import CorsoDetail from './pages/Corsi/CorsoDetail';
 import StudenteDetail from './pages/Studenti/StudenteDetail';
+import EsercitazioneDetail from './pages/Classi/EsercitazioneDetail';
 import Mailing from './pages/Mailing/Mailing';
 import Settings from './pages/Settings/Settings';
 import Economia from './pages/Economia/Economia';
@@ -61,6 +62,9 @@ export default function App() {
             } />
             <Route path="/corsi/:corsoId/classi/:classeId" element={
               <PrivateRoute><AppLayout><ClasseDetail /></AppLayout></PrivateRoute>
+            } />
+            <Route path="/corsi/:corsoId/classi/:classeId/esercitazioni/:esId" element={
+              <PrivateRoute><AppLayout><EsercitazioneDetail /></AppLayout></PrivateRoute>
             } />
             <Route path="/corsi/:corsoId/classi/:classeId/studenti/:studenteId" element={
               <PrivateRoute><AppLayout><StudenteDetail /></AppLayout></PrivateRoute>

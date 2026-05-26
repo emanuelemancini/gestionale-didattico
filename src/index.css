@@ -484,9 +484,12 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
 /* ─── Toast ─── */
 .toast-container {
-  position: fixed; bottom: 24px; right: 24px;
+  position: fixed; bottom: 24px;
+  left: calc(240px + (100vw - 240px) / 2);
+  transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 10px;
   z-index: 9999;
+  align-items: center;
 }
 .toast {
   display: flex; align-items: center; gap: 12px;
@@ -530,6 +533,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 @keyframes fadeIn    { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp   { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shimmer   { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 .fade-in  { animation: fadeIn 0.3s ease; }
@@ -905,4 +909,96 @@ tr:hover td { background: rgba(255,255,255,0.02); }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .cal-header { flex-wrap: wrap; gap: 8px; }
   .cal-period-label { min-width: unset; font-size: 13px; }
+}
+
+/* ─── Mobile: Bottom Bar ─── */
+.bottom-bar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Nascondi sidebar, mostra bottom bar */
+  .sidebar { display: none; }
+  .main-content { margin-left: 0; padding-bottom: 64px; }
+
+  /* Bottom bar fissa */
+  .bottom-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 64px;
+    background: #134f5c;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    z-index: 300;
+    align-items: stretch;
+  }
+  .bottom-bar-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: rgba(255,255,255,0.55);
+    font-size: 10px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.2s;
+    padding: 6px 4px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+  }
+  .bottom-bar-item.active,
+  .bottom-bar-item:hover { color: #fff; }
+  .bottom-bar-item.active .bottom-bar-icon { color: var(--accent, #0f766e); }
+  .bottom-bar-icon { flex-shrink: 0; }
+
+  /* Layout e spaziatura */
+  .page { padding: 12px 14px; }
+  .page-header { flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .page-title { font-size: 18px; }
+  .header { padding: 0 14px; height: 56px; }
+  .header-title { font-size: 15px; }
+
+  /* KPI */
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .kpi-card { padding: 14px; gap: 10px; }
+  .kpi-value { font-size: 22px; }
+  .kpi-icon { width: 36px; height: 36px; font-size: 16px; }
+
+  /* Card */
+  .card { padding: 14px; }
+
+  /* Tabs scroll orizzontale */
+  .tabs { overflow-x: auto; white-space: nowrap; flex-wrap: nowrap; padding-bottom: 0; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 10px 14px; font-size: 14px; flex-shrink: 0; }
+
+  /* Tabelle */
+  .table-wrap, table { overflow-x: auto; display: block; }
+
+  /* Modal */
+  .modal { margin: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-width: 100%; max-height: 92vh; position: fixed; bottom: 0; left: 0; right: 0; }
+  .modal-overlay { align-items: flex-end; padding: 0; }
+
+  /* Toast posizionamento */
+  .toast-container { left: 50%; bottom: 76px; }
+
+  /* Grid 2 colonne -> 1 su mobile */
+  .grid-2 { grid-template-columns: 1fr; }
+
+  /* Grid esercitazioni/prove: 2 colonne -> 1 */
+  .esercitazioni-grid { grid-template-columns: 1fr !important; }
+
+  /* Bottoni */
+  .btn { padding: 9px 14px; font-size: 13px; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+  /* Ricerca header */
+  .header-search-btn { display: none; }
+
+  /* Testo truncate su mobile */
+  .mobile-truncate { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

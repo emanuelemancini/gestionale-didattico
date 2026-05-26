@@ -1,5 +1,6 @@
 // src/components/layout/AppLayout.jsx
 import Sidebar from './Sidebar';
+import BottomBar from './BottomBar';
 
 export default function AppLayout({ children }) {
   return (
@@ -8,6 +9,7 @@ export default function AppLayout({ children }) {
       <div className="main-content">
         {children}
       </div>
+      <BottomBar />
     </div>
   );
 }

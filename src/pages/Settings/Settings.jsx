@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Moon, Sun, CheckCircle2, Play, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import AdminUsers from './AdminUsers';
 import UserProfile from './UserProfile';
+import SettingsCalendario from './SettingsCalendario';
 import { runSeed, runReset } from '../Seed/SeedPage';
 import Modal from '../../components/ui/Modal';
 
@@ -44,6 +45,7 @@ export default function Settings() {
         {[
           { id: 'profilo', label: 'Il Tuo Profilo' },
           { id: 'aspetto', label: 'Aspetto' },
+          { id: 'calendario', label: 'Calendario' },
           ...(isAdmin ? [{ id: 'admin', label: 'Amministrazione' }] : []),
           { id: 'dati', label: 'Dati di esempio' },
         ].map(t => (
@@ -117,6 +119,13 @@ export default function Settings() {
           {activeTab === 'profilo' && (
             <div className="fade-in">
               <UserProfile />
+            </div>
+          )}
+
+          {/* CONTENUTO TAB CALENDARIO */}
+          {activeTab === 'calendario' && (
+            <div className="fade-in">
+              <SettingsCalendario />
             </div>
           )}
 

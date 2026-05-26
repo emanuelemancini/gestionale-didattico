@@ -78,7 +78,8 @@ export default function ClasseDetail() {
   const [studenti, setStudenti] = useState([]);
   const [lezioni, setLezioni] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('programma');
+  const [tab, setTab] = useState(() => sessionStorage.getItem(`classe_tab_${classeId}`) || 'programma');
+  useEffect(() => { sessionStorage.setItem(`classe_tab_${classeId}`, tab); }, [tab, classeId]);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -883,6 +884,18 @@ export default function ClasseDetail() {
                 <span style={{ color: 'var(--text-2)' }}>Totale lezioni</span>
                 <span style={{ fontWeight: 600 }}>{lezioni.length}</span>
               </div>
+              {lezioni.length > 0 && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-2)' }}>Prima lezione</span>
+                    <span style={{ fontWeight: 600 }}>{format(new Date(lezioni[0].data + 'T12:00:00'), 'd MMM yyyy', { locale: it })}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-2)' }}>Ultima lezione</span>
+                    <span style={{ fontWeight: 600 }}>{format(new Date(lezioni[lezioni.length - 1].data + 'T12:00:00'), 'd MMM yyyy', { locale: it })}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

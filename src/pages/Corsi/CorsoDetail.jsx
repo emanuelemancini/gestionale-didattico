@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import { useParams, Link } from 'react-router-dom';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
-import { GraduationCap, Users, Plus, X, ChevronRight, BookOpen, Building2 } from 'lucide-react';
+import { GraduationCap, Users, Plus, X, ChevronRight, BookOpen, Building2, CalendarDays } from 'lucide-react';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 const COLORS = ['#4f8ef7','#10b981','#f59e0b','#f43f5e','#8b5cf6','#06b6d4','#ec4899','#0d9488'];
 
@@ -22,6 +24,7 @@ export default function CorsoDetail() {
   const [loading, setLoading]           = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving]             = useState(false);
+  const [dateRanges, setDateRanges]     = useState({});
 
   const mountedRef = useRef(true);
   useEffect(() => { return () => { mountedRef.current = false; }; }, []);
@@ -50,10 +53,26 @@ export default function CorsoDetail() {
         )
       );
 
+      // Carica date prima/ultima lezione per ogni classe assegnata
+      const lezioniSnap = await getDocs(
+        query(collection(db, 'users', user.uid, 'lezioni'), where('corsoId', '==', corsoId))
+      );
+      const ranges = {};
+      lezioniSnap.docs.forEach(d => {
+        const { classeId, data } = d.data();
+        if (!classeId || !data) return;
+        if (!ranges[classeId]) ranges[classeId] = { min: data, max: data };
+        else {
+          if (data < ranges[classeId].min) ranges[classeId].min = data;
+          if (data > ranges[classeId].max) ranges[classeId].max = data;
+        }
+      });
+
       setCorso({ id: corsoSnap.id, ...corsoSnap.data() });
       setTutteClassi(tutte);
       setClassiAssegnate(assegnate);
       setStudentiCount(Object.fromEntries(counts));
+      setDateRanges(ranges);
     } catch (e) {
       console.error('CorsoDetail loadData error:', e);
     } finally {
@@ -152,13 +171,25 @@ export default function CorsoDetail() {
                         <Building2 size={12} style={{ flexShrink:0 }} /> {cl.istituzione}
                       </div>
                     )}
-                    <div style={{ borderTop:'1px solid var(--border)', paddingTop:12, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'var(--text-2)' }}>
-                        <Users size={14} style={{ color }} />
-                        <span style={{ fontWeight:600, color:'var(--text)' }}>{nStudenti}</span>
-                        {nStudenti === 1 ? 'studente' : 'studenti'}
+                    <div style={{ borderTop:'1px solid var(--border)', paddingTop:12, display:'flex', flexDirection:'column', gap:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, color:'var(--text-2)' }}>
+                          <Users size={14} style={{ color }} />
+                          <span style={{ fontWeight:600, color:'var(--text)' }}>{nStudenti}</span>
+                          {nStudenti === 1 ? 'studente' : 'studenti'}
+                        </div>
+                        <ChevronRight size={16} style={{ color:'var(--text-3)' }} />
                       </div>
-                      <ChevronRight size={16} style={{ color:'var(--text-3)' }} />
+                      {dateRanges[cl.id] ? (
+                        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--text-3)' }}>
+                          <CalendarDays size={12} style={{ flexShrink:0 }} />
+                          {format(new Date(dateRanges[cl.id].min + 'T12:00:00'), 'd MMM yyyy', { locale: it })}
+                          {' → '}
+                          {format(new Date(dateRanges[cl.id].max + 'T12:00:00'), 'd MMM yyyy', { locale: it })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:12, color:'var(--text-3)', fontStyle:'italic' }}>Nessuna lezione</div>
+                      )}
                     </div>
                   </Link>
                 </div>
