@@ -668,22 +668,30 @@ export default function ClasseDetail() {
                 const d = new Date(lez.data);
                 const meseLbl = format(d, 'MMM', { locale: it }).toUpperCase();
                 const giornoNum = format(d, 'dd');
-                const titolo = (() => {
-                  // Nuovo formato: argomentiSelezionati
+                // Righe titolo: una per argomento
+                const titoloRighe = (() => {
                   if (lez.argomentiSelezionati && Object.keys(lez.argomentiSelezionati).length > 0) {
-                    return Object.entries(lez.argomentiSelezionati).map(([argId, subIds]) => {
+                    const righe = Object.entries(lez.argomentiSelezionati).map(([argId, subIds]) => {
                       const arg = programma.find(p => p.id === argId);
                       if (!arg) return null;
                       if (!subIds.length) return arg.titolo;
                       const subLabels = subIds.map(sid => (arg.sottoargomenti || []).find(s => s.id === sid)?.titolo).filter(Boolean);
                       return subLabels.length > 0 ? `${arg.titolo} · ${subLabels.join(', ')}` : arg.titolo;
-                    }).filter(Boolean).join(' / ') || lez.note || 'Lezione';
+                    }).filter(Boolean);
+                    return righe.length > 0 ? righe : [lez.note || 'Lezione'];
                   }
                   // Vecchio formato (retrocompatibilità)
                   const argomento = lez.argomentoId ? programma.find(p => p.id === lez.argomentoId) : null;
                   const sottoargomento = lez.sottoargomentoId && argomento ? (argomento.sottoargomenti || []).find(s => s.id === lez.sottoargomentoId) : null;
-                  return sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
+                  const str = sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
+                  return [str];
                 })();
+                const durataOre = lez.durata ? (() => {
+                  const h = Math.floor(lez.durata / 60);
+                  const m = lez.durata % 60;
+                  if (m === 0) return `${h}h`;
+                  return `${h}h ${m}min`;
+                })() : null;
                 return (
                   <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
                     <div style={{
@@ -696,12 +704,14 @@ export default function ClasseDetail() {
                       <div style={{ fontSize: 22, fontWeight: 800, color: past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {titolo}
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                        {titoloRighe.map((riga, i) => (
+                          <div key={i} style={{ lineHeight: 1.4 }}>{riga}</div>
+                        ))}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', gap: 12 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={12} /> {lez.oraInizio}–{lez.oraFine}</span>
-                        {lez.durata && <span>{lez.durata} min</span>}
+                        {durataOre && <span>{durataOre}</span>}
                       </div>
                     </div>
                     <span className={`badge ${past ? 'badge-success' : 'badge-blue'}`}>{past ? 'Svolta' : 'In programma'}</span>
