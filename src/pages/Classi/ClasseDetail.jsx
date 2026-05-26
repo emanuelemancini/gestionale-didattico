@@ -12,7 +12,7 @@ import Tesseract from 'tesseract.js';
 import {
   FolderUp, Camera, Download, User, Trash2, PenTool,
   CheckCircle2, Hourglass, FileText, Calendar, BookOpen, Clock,
-  ChevronLeft, ChevronDown, ChevronRight, BarChart2, Users, CheckSquare, Square, Edit2, Plus, GripVertical
+  ChevronLeft, ChevronDown, ChevronRight, BarChart2, Users, CheckSquare, Square, Edit2, Plus, GripVertical, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -161,6 +161,19 @@ export default function ClasseDetail() {
       return Object.keys(l.argomentiSelezionati);
     return l.argomentoId ? [l.argomentoId] : [];
   }))];
+  // Mappa topicId → Set di subId usati nelle lezioni passate
+  const subsDoneMap = {};
+  lezioniPassate.forEach(l => {
+    if (l.argomentiSelezionati && Object.keys(l.argomentiSelezionati).length > 0) {
+      Object.entries(l.argomentiSelezionati).forEach(([argId, subIds]) => {
+        if (!subsDoneMap[argId]) subsDoneMap[argId] = new Set();
+        subIds.forEach(sid => subsDoneMap[argId].add(sid));
+      });
+    } else if (l.argomentoId) {
+      if (!subsDoneMap[l.argomentoId]) subsDoneMap[l.argomentoId] = new Set();
+      if (l.sottoargomentoId) subsDoneMap[l.argomentoId].add(l.sottoargomentoId);
+    }
+  });
   const topicsAll    = programma;
   const topicsDone   = programma.filter(p => topicsDoneIds.includes(p.id));
   const pct = orePreviste > 0 ? Math.round((oreSvolte / orePreviste) * 100) : 0;
@@ -537,9 +550,18 @@ export default function ClasseDetail() {
                 <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleReorderTopics}>
                   <SortableContext items={programma.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     {programma.map((topic, i) => {
-                      const lezioniTopic = lezioni.filter(l => l.argomentoId === topic.id);
+                      const lezioniTopic = lezioni.filter(l =>
+                        l.argomentoId === topic.id ||
+                        (l.argomentiSelezionati && l.argomentiSelezionati[topic.id] !== undefined)
+                      );
                       const expanded = expandedTopics[topic.id];
                       const subs = topic.sottoargomenti || [];
+                      const subsDone = subsDoneMap[topic.id] || new Set();
+                      const trattatiCount = subs.length > 0
+                        ? subs.filter(s => subsDone.has(s.id)).length
+                        : (topicsDoneIds.includes(topic.id) ? 1 : 0);
+                      const trattatiTotal = subs.length > 0 ? subs.length : 1;
+                      const tuttiTrattati = trattatiCount === trattatiTotal;
                       return (
                         <SortableTopicCard key={topic.id} id={topic.id}>
                           {({ dragHandleProps }) => (<>
@@ -587,6 +609,13 @@ export default function ClasseDetail() {
                                       {subs.length} {subs.length === 1 ? 'sottoargomento' : 'sottoargomenti'}
                                     </span>
                                   )}
+                                  <span style={{
+                                    fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '1px 7px',
+                                    color: tuttiTrattati ? '#16a34a' : trattatiCount > 0 ? '#d97706' : '#ef4444',
+                                    background: tuttiTrattati ? 'rgba(22,163,74,0.1)' : trattatiCount > 0 ? 'rgba(217,119,6,0.1)' : 'rgba(239,68,68,0.1)',
+                                  }}>
+                                    {trattatiCount}/{trattatiTotal} trattati
+                                  </span>
                                   {lezioniTopic.length > 0 && (
                                     <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
                                       {lezioniTopic.length} {lezioniTopic.length === 1 ? 'lezione' : 'lezioni'}
@@ -609,17 +638,27 @@ export default function ClasseDetail() {
                               <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', padding: '10px 18px 14px 120px' }}>
                                 {subs.map((sub, si) => {
                                   const isLast = si === subs.length - 1;
+                                  const isDone = subsDone.has(sub.id);
                                   return (
                                     <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
                                       <div style={{ position: 'absolute', left: -24, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: '#0d9488', opacity: 0.25 }} />
                                       <div style={{ position: 'absolute', left: -24, top: '50%', width: 24, height: 2, background: '#0d9488', opacity: 0.25 }} />
                                       <span style={{
-                                        fontSize: 11, fontWeight: 600, color: '#0d9488',
-                                        border: '1.5px solid #0d9488', borderRadius: 6,
-                                        width: 32, height: 32, display: 'inline-flex',
-                                        alignItems: 'center', justifyContent: 'center',
-                                        flexShrink: 0, background: 'transparent', margin: '5px 0'
-                                      }}>{i + 1}.{si + 1}</span>
+                                        fontSize: 11, fontWeight: 600,
+                                        color: isDone ? '#16a34a' : '#ef4444',
+                                        border: `1.5px solid ${isDone ? '#16a34a' : '#ef4444'}`,
+                                        borderRadius: 6,
+                                        width: 32, height: 32,
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        flexShrink: 0, margin: '5px 0',
+                                        background: isDone ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.08)',
+                                        position: 'relative', overflow: 'hidden',
+                                      }}>
+                                        <span style={{ opacity: isDone ? 0.35 : 1 }}>{i + 1}.{si + 1}</span>
+                                        {isDone && (
+                                          <Check size={14} strokeWidth={3} style={{ position: 'absolute', color: '#16a34a', opacity: 0.55 }} />
+                                        )}
+                                      </span>
                                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', flex: 1 }}>{sub.titolo}</span>
                                     </div>
                                   );
