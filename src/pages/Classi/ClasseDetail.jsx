@@ -668,9 +668,22 @@ export default function ClasseDetail() {
                 const d = new Date(lez.data);
                 const meseLbl = format(d, 'MMM', { locale: it }).toUpperCase();
                 const giornoNum = format(d, 'dd');
-                const argomento = lez.argomentoId ? programma.find(p => p.id === lez.argomentoId) : null;
-                const sottoargomento = lez.sottoargomentoId && argomento ? (argomento.sottoargomenti || []).find(s => s.id === lez.sottoargomentoId) : null;
-                const titolo = sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
+                const titolo = (() => {
+                  // Nuovo formato: argomentiSelezionati
+                  if (lez.argomentiSelezionati && Object.keys(lez.argomentiSelezionati).length > 0) {
+                    return Object.entries(lez.argomentiSelezionati).map(([argId, subIds]) => {
+                      const arg = programma.find(p => p.id === argId);
+                      if (!arg) return null;
+                      if (!subIds.length) return arg.titolo;
+                      const subLabels = subIds.map(sid => (arg.sottoargomenti || []).find(s => s.id === sid)?.titolo).filter(Boolean);
+                      return subLabels.length > 0 ? `${arg.titolo} · ${subLabels.join(', ')}` : arg.titolo;
+                    }).filter(Boolean).join(' / ') || lez.note || 'Lezione';
+                  }
+                  // Vecchio formato (retrocompatibilità)
+                  const argomento = lez.argomentoId ? programma.find(p => p.id === lez.argomentoId) : null;
+                  const sottoargomento = lez.sottoargomentoId && argomento ? (argomento.sottoargomenti || []).find(s => s.id === lez.sottoargomentoId) : null;
+                  return sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
+                })();
                 return (
                   <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
                     <div style={{

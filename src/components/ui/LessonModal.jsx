@@ -49,6 +49,13 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
   const [classiJunction, setClassiJunction] = useState([]); // classi assegnate al corso selezionato
   const [programma, setProgramma]   = useState([]);
 
+  // Argomenti selezionati: { argomentoId: [sottoargomentoId, ...] }
+  const [argomentiSelezionati, setArgomentiSelezionati] = useState(() => {
+    if (isEdit && lesson.argomentiSelezionati) return lesson.argomentiSelezionati;
+    if (isEdit && lesson.argomentoId) return { [lesson.argomentoId]: lesson.sottoargomentoId ? [lesson.sottoargomentoId] : [] };
+    return {};
+  });
+
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
 
   // Quando cambia il corso, carica le classi associate e resetta classe/argomento
@@ -90,14 +97,33 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
     }
   }, [corsi, form.corsoId]);
 
+  function toggleArgomento(argId) {
+    setArgomentiSelezionati(prev => {
+      const next = { ...prev };
+      if (next[argId] !== undefined) delete next[argId];
+      else next[argId] = [];
+      return next;
+    });
+  }
+
+  function toggleSottoargomento(argId, subId) {
+    setArgomentiSelezionati(prev => {
+      const subs = prev[argId] || [];
+      const next = subs.includes(subId) ? subs.filter(s => s !== subId) : [...subs, subId];
+      return { ...prev, [argId]: next };
+    });
+  }
+
   function handleCorsoChange(corsoId) {
     const corso = corsi.find(c => c.id === corsoId);
-    setForm(f => ({ ...f, corsoId, nomeCorso: corso?.nomeCorso || '', classeId: '', istituzione: '', argomentoId: '', sottoargomentoId: '' }));
+    setForm(f => ({ ...f, corsoId, nomeCorso: corso?.nomeCorso || '', classeId: '', istituzione: '' }));
+    setArgomentiSelezionati({});
   }
 
   function handleClasseChange(classeId) {
     const classe = classiJunction.find(c => c.id === classeId);
-    setForm(f => ({ ...f, classeId, istituzione: classe?.istituzione || f.istituzione, argomentoId: '', sottoargomentoId: '' }));
+    setForm(f => ({ ...f, classeId, istituzione: classe?.istituzione || f.istituzione }));
+    setArgomentiSelezionati({});
   }
 
   // Lezioni dello stesso corso+classe, per riferimento
@@ -141,8 +167,7 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
         istituzione: form.istituzione || '',
         note:        form.note || '',
         durata:      form.durata || 0,
-        argomentoId: form.argomentoId || null,
-        sottoargomentoId: form.sottoargomentoId || null,
+        argomentiSelezionati,
         dataDate:    Timestamp.fromDate(new Date(form.data + 'T12:00:00')),
       };
       if (isEdit) {
@@ -208,32 +233,49 @@ export default function LessonModal({ lesson, defaultDate, corsi = [], istituzio
             </div>
           )}
 
-          {/* Argomento del programma */}
+          {/* Argomenti trattati — checkbox multipli */}
           {form.classeId && programma.length > 0 && (
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Argomento del programma</label>
-              <select className="form-input" value={form.argomentoId} onChange={e => { set('argomentoId', e.target.value); set('sottoargomentoId', ''); }}>
-                <option value="">— Nessun argomento —</option>
-                {programma.map(t => <option key={t.id} value={t.id}>{t.titolo}</option>)}
-              </select>
+              <label className="form-label">Argomenti trattati</label>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                {programma.map((topic, i) => {
+                  const isChecked = argomentiSelezionati[topic.id] !== undefined;
+                  const subs = topic.sottoargomenti || [];
+                  return (
+                    <div key={topic.id} style={{ borderBottom: i < programma.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer', background: isChecked ? 'color-mix(in srgb, var(--accent) 5%, transparent)' : 'transparent' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleArgomento(topic.id)}
+                          style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{topic.titolo}</span>
+                      </label>
+                      {isChecked && subs.length > 0 && (
+                        <div style={{ paddingLeft: 36, paddingBottom: 8, borderTop: '1px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 3%, transparent)' }}>
+                          {subs.map(s => {
+                            const isSubChecked = (argomentiSelezionati[topic.id] || []).includes(s.id);
+                            return (
+                              <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 0', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSubChecked}
+                                  onChange={() => toggleSottoargomento(topic.id, s.id)}
+                                  style={{ width: 13, height: 13, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }}
+                                />
+                                <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.titolo}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
-
-          {/* Sottoargomento */}
-          {(() => {
-            const topic = programma.find(t => t.id === form.argomentoId);
-            const subs = topic?.sottoargomenti || [];
-            if (!form.argomentoId || subs.length === 0) return null;
-            return (
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Sottoargomento</label>
-                <select className="form-input" value={form.sottoargomentoId} onChange={e => set('sottoargomentoId', e.target.value)}>
-                  <option value="">— Nessun sottoargomento —</option>
-                  {subs.map(s => <option key={s.id} value={s.id}>{s.titolo}</option>)}
-                </select>
-              </div>
-            );
-          })()}
 
           {/* Data / Inizio / Fine */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>

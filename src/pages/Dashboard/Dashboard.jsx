@@ -87,25 +87,38 @@ export default function Dashboard() {
     ]);
     const classiMap = Object.fromEntries(classiSnap.docs.map(d => [d.id, d.data().nome]));
 
-    // Carica programma per ogni coppia unica (corsoId, classeId) per risolvere argomentoId → titolo
+    // Carica programma per ogni coppia unica (corsoId, classeId) per risolvere argomenti → titoli
     const pairs = new Map();
     lezioniSnap.docs.forEach(d => {
-      const { corsoId, classeId, argomentoId } = d.data();
-      if (corsoId && classeId && argomentoId) pairs.set(`${corsoId}__${classeId}`, { corsoId, classeId });
+      const { corsoId, classeId, argomentoId, argomentiSelezionati } = d.data();
+      if (corsoId && classeId && (argomentoId || (argomentiSelezionati && Object.keys(argomentiSelezionati).length > 0)))
+        pairs.set(`${corsoId}__${classeId}`, { corsoId, classeId });
     });
-    const argomentoMap = {}; // key: argomentoId → titolo
+    const argomentoMap = {}; // key: argomentoId → { titolo, sottoargomenti }
     await Promise.all([...pairs.values()].map(async ({ corsoId, classeId }) => {
       const snap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma'));
-      snap.docs.forEach(d => { argomentoMap[d.id] = d.data().titolo || ''; });
+      snap.docs.forEach(d => { argomentoMap[d.id] = { titolo: d.data().titolo || '', sottoargomenti: d.data().sottoargomenti || [] }; });
     }));
 
     const list = lezioniSnap.docs.map(d => {
       const data = d.data();
+      let argomentoTitolo = '';
+      if (data.argomentiSelezionati && Object.keys(data.argomentiSelezionati).length > 0) {
+        argomentoTitolo = Object.entries(data.argomentiSelezionati).map(([argId, subIds]) => {
+          const arg = argomentoMap[argId];
+          if (!arg) return null;
+          if (!subIds.length) return arg.titolo;
+          const subLabels = subIds.map(sid => arg.sottoargomenti.find(s => s.id === sid)?.titolo).filter(Boolean);
+          return subLabels.length > 0 ? `${arg.titolo} · ${subLabels.join(', ')}` : arg.titolo;
+        }).filter(Boolean).join(' / ');
+      } else if (data.argomentoId) {
+        argomentoTitolo = argomentoMap[data.argomentoId]?.titolo || '';
+      }
       return {
         id: d.id,
         ...data,
         nomeClasse: classiMap[data.classeId] || '',
-        argomentoTitolo: data.argomentoId ? (argomentoMap[data.argomentoId] || '') : '',
+        argomentoTitolo,
         dataDate: data.dataDate?.toDate ? data.dataDate.toDate() : new Date(data.data + 'T12:00:00'),
       };
     });
