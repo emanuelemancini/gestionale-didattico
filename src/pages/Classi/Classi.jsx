@@ -172,10 +172,24 @@ export default function Classi() {
             )}
           </div>
         ) : (
-          <div className="grid-3">
-            {filtered.map(cl => {
-              const color = colorMap[cl.id];
-              return (
+          <>
+          {(() => {
+            // Raggruppa per istituzione; classi senza istituzione in un gruppo "Altro"
+            const groups = {};
+            filtered.forEach(cl => {
+              const key = cl.istituzione?.trim() || '—';
+              if (!groups[key]) groups[key] = [];
+              groups[key].push(cl);
+            });
+            return Object.entries(groups).map(([ist, classiGruppo]) => (
+              <div key={ist} style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>
+                  {ist}
+                </div>
+                <div className="grid-3">
+                  {classiGruppo.map(cl => {
+                    const color = colorMap[cl.id];
+                    return (
                 <div key={cl.id} className="card card-hover" style={{ position: 'relative', padding: 20 }}>
                   {/* Header card: badge + menu */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -228,9 +242,13 @@ export default function Classi() {
                     </div>
                   </Link>
                 </div>
-              );
-            })}
-          </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ));
+          })()}
+          </>
         )}
       </div>
 
