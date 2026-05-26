@@ -193,13 +193,13 @@ export default function Classi() {
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '8px 14px', borderRadius: 8, marginBottom: isCollapsed ? 0 : 14,
-                    background: 'var(--surface-el)', cursor: 'pointer',
-                    border: '1px solid var(--border)', transition: 'background 0.15s',
+                    background: 'color-mix(in srgb, var(--accent) 10%, transparent)', cursor: 'pointer',
+                    border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', transition: 'background 0.15s',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--border) 60%, var(--surface-el))'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-el)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 18%, transparent)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 10%, transparent)'}
                 >
-                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-2)', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--accent)', textTransform: 'uppercase' }}>
                     {ist}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
