@@ -9,7 +9,8 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
-import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock } from 'lucide-react';
+import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList } from 'lucide-react';
+import LessonModal from '../../components/ui/LessonModal';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -37,6 +38,7 @@ export default function ClasseOverview() {
   const [filterCorso, setFilterCorso]   = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo]   = useState('');
+  const [editLezione, setEditLezione]   = useState(null);
   const [selected, setSelected]     = useState(null);
 
   const [showAddModal, setShowAddModal]       = useState(false);
@@ -534,15 +536,22 @@ export default function ClasseOverview() {
                       const durataStr = h > 0
                         ? (m > 0 ? `${h} ${h === 1 ? 'ora' : 'ore'} ${m}min` : `${h} ${h === 1 ? 'ora' : 'ore'}`)
                         : m > 0 ? `${m}min` : '';
+                      const corso = corsi.find(c => c.id === l.corsoId);
+                      const presenzeUrl = corso?.slug
+                        ? `/corsi/${corso.slug}/classi/${classeSlug}?tab=presenze&date=${l.data}`
+                        : null;
                       return (
                         <div key={l.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px',
+                          display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px',
                           borderBottom: idx < lezMese.length - 1 ? '1px solid var(--border)' : 'none',
                         }}>
-                          {/* Data */}
-                          <div style={{ width: 80, flexShrink: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{format(parseISO(l.data), 'EEE dd', { locale: it })}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{l.oraInizio}–{l.oraFine}</div>
+                          {/* Data + orario + durata */}
+                          <div style={{ width: 110, flexShrink: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{format(parseISO(l.data), 'EEE dd', { locale: it })}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {l.oraInizio}–{l.oraFine}
+                              {durataStr && <span style={{ color: 'var(--text-3)' }}>· {durataStr}</span>}
+                            </div>
                           </div>
                           {/* Corso pill */}
                           <div style={{ flexShrink: 0 }}>
@@ -550,16 +559,31 @@ export default function ClasseOverview() {
                               {l.nomeCorso}
                             </span>
                           </div>
-                          {/* Argomenti / note */}
+                          {/* Note */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             {l.note && <div style={{ fontSize: 13, color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.note}</div>}
                           </div>
-                          {/* Durata */}
-                          {durataStr && (
-                            <div style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <Clock size={12} /> {durataStr}
-                            </div>
-                          )}
+                          {/* Azioni */}
+                          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                            {presenzeUrl && (
+                              <Link to={presenzeUrl} title="Presenze" style={{
+                                width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)',
+                                background: 'var(--surface-el)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: 'var(--text-2)', textDecoration: 'none', flexShrink: 0,
+                              }}>
+                                <ClipboardList size={14} />
+                              </Link>
+                            )}
+                            <button
+                              title="Modifica lezione"
+                              onClick={() => setEditLezione(l)}
+                              style={{
+                                width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)',
+                                background: 'var(--surface-el)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                              <Edit2 size={13} color="var(--text-2)" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -571,6 +595,26 @@ export default function ClasseOverview() {
         )} {/* fine tab lezioni */}
 
       </div>
+
+      {/* Modal modifica lezione */}
+      {editLezione && (
+        <LessonModal
+          lesson={editLezione}
+          corsi={corsi}
+          lezioni={lezioni}
+          istituzioni={[...new Set(lezioni.map(l => l.istituzione).filter(Boolean))]}
+          onClose={() => setEditLezione(null)}
+          onSaved={() => {
+            setEditLezione(null);
+            if (classeId) {
+              setLoadingLezioni(true);
+              getDocs(query(collection(db, 'users', user.uid, 'lezioni'), where('classeId', '==', classeId)))
+                .then(snap => setLezioni(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.data?.localeCompare(a.data) || b.oraInizio?.localeCompare(a.oraInizio))))
+                .finally(() => setLoadingLezioni(false));
+            }
+          }}
+        />
+      )}
 
       {/* Modal modifica studente */}
       {editTarget && (
