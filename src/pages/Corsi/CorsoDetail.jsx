@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import { useParams, Link } from 'react-router-dom';
+import { toUniqueSlug } from '../../utils/slug';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { GraduationCap, Users, Plus, X, ChevronRight, BookOpen, Building2, CalendarDays } from 'lucide-react';
@@ -13,11 +14,12 @@ import { it } from 'date-fns/locale';
 const COLORS = ['#4f8ef7','#10b981','#f59e0b','#f43f5e','#8b5cf6','#06b6d4','#ec4899','#0d9488'];
 
 export default function CorsoDetail() {
-  const { corsoId } = useParams();
+  const { corsoSlug } = useParams();
   const { user } = useAuth();
   const toast = useToast();
 
   const [corso, setCorso]               = useState(null);
+  const [corsoId, setCorsoId]           = useState(null);
   const [classiAssegnate, setClassiAssegnate] = useState([]);
   const [tutteClassi, setTutteClassi]   = useState([]);
   const [studentiCount, setStudentiCount] = useState({});
@@ -29,20 +31,38 @@ export default function CorsoDetail() {
   const mountedRef = useRef(true);
   useEffect(() => { return () => { mountedRef.current = false; }; }, []);
 
-  useEffect(() => { loadData(); }, [corsoId, user]);
+  useEffect(() => { loadData(); }, [corsoSlug, user]);
 
   async function loadData() {
     if (!user) return;
     setLoading(true);
     try {
-      const corsoSnap = await getDoc(doc(db, 'users', user.uid, 'corsi', corsoId));
-      if (!corsoSnap.exists()) { setLoading(false); return; }
+      // Risolvi corsoId dallo slug
+      const corsiQ = query(collection(db, 'users', user.uid, 'corsi'), where('slug', '==', corsoSlug));
+      const corsiSnap = await getDocs(corsiQ);
+      if (corsiSnap.empty) { setLoading(false); return; }
+      const corsoDoc = corsiSnap.docs[0];
+      const resolvedCorsoId = corsoDoc.id;
+      setCorsoId(resolvedCorsoId);
 
-      const junctionSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi'));
+      const junctionSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', resolvedCorsoId, 'classi'));
       const junctionIds = junctionSnap.docs.map(d => d.id);
 
       const tutteSnap = await getDocs(collection(db, 'users', user.uid, 'classi'));
       const tutte = tutteSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Migrazione classi senza slug
+      const classiSlugsExisting = tutte.map(c => c.slug).filter(Boolean);
+      const classiToMigrate = tutte.filter(c => !c.slug);
+      if (classiToMigrate.length > 0) {
+        const accumulated = [...classiSlugsExisting];
+        await Promise.all(classiToMigrate.map(async c => {
+          const slug = toUniqueSlug(c.nome, accumulated);
+          accumulated.push(slug);
+          await updateDoc(doc(db, 'users', user.uid, 'classi', c.id), { slug });
+          c.slug = slug;
+        }));
+      }
 
       const assegnate = tutte.filter(c => junctionIds.includes(c.id));
 
@@ -55,7 +75,7 @@ export default function CorsoDetail() {
 
       // Carica date prima/ultima lezione per ogni classe assegnata
       const lezioniSnap = await getDocs(
-        query(collection(db, 'users', user.uid, 'lezioni'), where('corsoId', '==', corsoId))
+        query(collection(db, 'users', user.uid, 'lezioni'), where('corsoId', '==', resolvedCorsoId))
       );
       const ranges = {};
       lezioniSnap.docs.forEach(d => {
@@ -68,7 +88,7 @@ export default function CorsoDetail() {
         }
       });
 
-      setCorso({ id: corsoSnap.id, ...corsoSnap.data() });
+      setCorso({ id: corsoDoc.id, ...corsoDoc.data() });
       setTutteClassi(tutte);
       setClassiAssegnate(assegnate);
       setStudentiCount(Object.fromEntries(counts));
@@ -81,6 +101,7 @@ export default function CorsoDetail() {
   }
 
   async function rimuoviClasse(classeId) {
+    if (!corsoId) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId));
       toast('Classe rimossa', 'success');
@@ -89,6 +110,7 @@ export default function CorsoDetail() {
   }
 
   async function aggiungiClassi(selectedIds) {
+    if (!corsoId) return;
     setSaving(true);
     try {
       await Promise.all(selectedIds.map(classeId =>
@@ -157,7 +179,7 @@ export default function CorsoDetail() {
                     <X size={14} />
                   </button>
 
-                  <Link to={`/corsi/${corsoId}/classi/${cl.id}`} style={{ textDecoration:'none', display:'block' }}>
+                  <Link to={`/corsi/${corsoSlug}/classi/${cl.slug || cl.id}`} style={{ textDecoration:'none', display:'block' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
                       <div style={{ width:36, height:36, borderRadius:10, background:`${color}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                         <GraduationCap size={18} style={{ color }} />

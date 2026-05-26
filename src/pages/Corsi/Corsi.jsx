@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, query, where } from 'firebase/firestore';
+import { toUniqueSlug } from '../../utils/slug';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
@@ -110,7 +111,22 @@ export default function Corsi() {
     setLoading(true);
     try {
       const snap = await getDocs(collection(db, 'users', user.uid, 'corsi'));
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => !d.archiviato);
+      const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Migrazione: genera slug per i corsi che non ce l'hanno ancora
+      const existingSlugs = allDocs.map(d => d.slug).filter(Boolean);
+      const toMigrate = allDocs.filter(d => !d.slug);
+      if (toMigrate.length > 0) {
+        const accumulated = [...existingSlugs];
+        await Promise.all(toMigrate.map(async c => {
+          const slug = toUniqueSlug(c.nomeCorso, accumulated);
+          accumulated.push(slug);
+          await updateDoc(doc(db, 'users', user.uid, 'corsi', c.id), { slug });
+          c.slug = slug; // aggiorna in-memory
+        }));
+      }
+
+      const docs = allDocs.filter(d => !d.archiviato);
       setCorsi(docs);
       const counts = await Promise.all(
         docs.map(c =>
@@ -153,6 +169,7 @@ export default function Corsi() {
         icona: form.icona,
       };
       if (editCorso) {
+        // NON aggiornare lo slug in modifica — l'URL rimane immutato
         await updateDoc(doc(db, 'users', user.uid, 'corsi', editCorso.id), payload);
         // Sync nomeCorso nelle lezioni collegate
         if (form.nomeCorso !== editCorso.nomeCorso) {
@@ -165,8 +182,12 @@ export default function Corsi() {
         }
         toast('Corso aggiornato', 'success');
       } else {
+        // Genera slug unico alla creazione
+        const snap = await getDocs(collection(db, 'users', user.uid, 'corsi'));
+        const existingSlugs = snap.docs.map(d => d.data().slug).filter(Boolean);
+        const slug = toUniqueSlug(form.nomeCorso, existingSlugs);
         await addDoc(collection(db, 'users', user.uid, 'corsi'), {
-          ...payload, createdAt: serverTimestamp()
+          ...payload, slug, createdAt: serverTimestamp()
         });
         toast('Corso creato!', 'success');
       }
@@ -208,12 +229,9 @@ export default function Corsi() {
       <Header
         title="Tutti i Corsi"
         subtitle="Panoramica dei tuoi corsi attivi con le classi assegnate."
-        actions={
-          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi corso</button>
-        }
       />
       <div className="page fade-in">
-        {/* Barra ricerca */}
+        {/* Barra ricerca + pulsante */}
         <div className="card" style={{ padding:'14px 16px', marginBottom:24, display:'flex', gap:12, alignItems:'center' }}>
           <div style={{ flex:1, position:'relative' }}>
             <Search size={16} style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'var(--text-3)' }} />
@@ -225,6 +243,7 @@ export default function Corsi() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi corso</button>
         </div>
 
         {loading ? (
@@ -278,7 +297,7 @@ export default function Corsi() {
                     )}
                   </div>
 
-                  <Link to={`/corsi/${c.id}`} style={{ textDecoration:'none', display:'block', padding:20 }}>
+                  <Link to={`/corsi/${c.slug || c.id}`} style={{ textDecoration:'none', display:'block', padding:20 }}>
                     {/* Header: icona grande + titolo */}
                     <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:14 }}>
                       <div style={{
@@ -360,6 +379,11 @@ export default function Corsi() {
             <label className="form-label">Nome Corso *</label>
             <input className="form-input" placeholder="es. Disegno e Composizione"
               value={form.nomeCorso} onChange={e => setForm(f => ({ ...f, nomeCorso: e.target.value }))} />
+            {!editCorso && (
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                ⚠️ Scegli bene il nome: una volta creato il corso, l&apos;URL non potrà essere modificato.
+              </div>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">Descrizione</label>

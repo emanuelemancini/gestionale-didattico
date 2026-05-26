@@ -7,17 +7,20 @@ import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import {
   ClipboardList, CalendarDays, CheckCircle2, XCircle, RotateCcw,
-  Square, Check, X, Save, Edit2
+  Square, Check, X, Save, Edit2, BookOpen
 } from 'lucide-react';
 
 function toDateStr(date) { return format(date, 'yyyy-MM-dd'); }
 
-export default function PresenzeTab({ corsoId, classeId, studenti }) {
+export default function PresenzeTab({ corsoId, classeId, studenti, initialDate }) {
   const { user } = useAuth();
   const toast = useToast();
 
   const [viewMode, setViewMode] = useState('registro');
-  const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
+  const [lezioniDate, setLezioniDate] = useState([]); // date lezioni per questa classe
+  const [lezioniByDate, setLezioniByDate] = useState({}); // mappa data → lezione
+  const [programma, setProgramma] = useState({}); // mappa argomentoId → titolo
+  const [selectedDate, setSelectedDate] = useState(initialDate || null);
   const [presenze, setPresenze] = useState({});
   const [storico, setStorico] = useState([]);
   const [studentStats, setStudentStats] = useState({});
@@ -27,8 +30,42 @@ export default function PresenzeTab({ corsoId, classeId, studenti }) {
   // Path: /users/{uid}/corsi/{corsoId}/classi/{classeId}/presenze
   const presenzeCol = (uid) => collection(db, 'users', uid, 'corsi', corsoId, 'classi', classeId, 'presenze');
 
+  // Carica le date delle lezioni + programma per questa classe
+  useEffect(() => {
+    if (!user || !classeId || !corsoId) return;
+    Promise.all([
+      getDocs(query(collection(db, 'users', user.uid, 'lezioni'), where('classeId', '==', classeId))),
+      getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma')),
+    ]).then(([lezioniSnap, programmaSnap]) => {
+      // Mappa argomentoId → titolo (inclusi sottoargomenti)
+      const progMap = {};
+      programmaSnap.docs.forEach(d => {
+        const { titolo, sottoargomenti = [] } = d.data();
+        progMap[d.id] = titolo;
+        sottoargomenti.forEach(s => { progMap[s.id] = s.titolo; });
+      });
+      setProgramma(progMap);
+
+      // Mappa data → prima lezione del giorno
+      const byDate = {};
+      lezioniSnap.docs.forEach(d => {
+        const data = d.data();
+        if (data.data && !byDate[data.data]) byDate[data.data] = data;
+      });
+      setLezioniByDate(byDate);
+
+      const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+      setLezioniDate(dates);
+      setSelectedDate(prev => {
+        if (prev && dates.includes(prev)) return prev;
+        if (initialDate && dates.includes(initialDate)) return initialDate;
+        return dates[0] || null;
+      });
+    });
+  }, [user, classeId, corsoId, initialDate]);
+
   useEffect(() => { loadStorico(); }, [corsoId, classeId, user, studenti]);
-  useEffect(() => { if (studenti.length) loadPresenze(selectedDate); }, [selectedDate, studenti]);
+  useEffect(() => { if (studenti.length && selectedDate) loadPresenze(selectedDate); }, [selectedDate, studenti]);
 
   const loadPresenze = async (dateStr) => {
     if (!user || !studenti.length) return;
@@ -60,7 +97,6 @@ export default function PresenzeTab({ corsoId, classeId, studenti }) {
       Object.entries(dateMap)
         .map(([data, v]) => ({ data, ...v }))
         .sort((a, b) => b.data.localeCompare(a.data))
-        .slice(0, 15)
     );
     const sStats = {};
     for (const id in statsMap) sStats[id] = Math.round((statsMap[id].presenti / statsMap[id].tot) * 100);
@@ -115,19 +151,47 @@ export default function PresenzeTab({ corsoId, classeId, studenti }) {
 
       {viewMode === 'registro' && (
         <>
+          {lezioniDate.length === 0 ? (
+            <div className="empty-state">
+              <BookOpen size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+              <div className="empty-state-title">Nessuna lezione registrata</div>
+              <div className="empty-state-text">Aggiungi lezioni nel registro per poter registrare le presenze.</div>
+            </div>
+          ) : (
+          <>
           <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Data</label>
-                <input type="date" className="form-input"
-                  value={selectedDate} max={toDateStr(new Date())}
-                  onChange={e => setSelectedDate(e.target.value)} />
+            {/* Selezione lezione + azioni sulla stessa riga */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ marginBottom: 0, flex: '1 1 240px', maxWidth: 360 }}>
+                <label className="form-label" style={{ marginBottom: 4, display: 'block' }}>Seleziona lezione</label>
+                <select
+                  className="form-input"
+                  value={selectedDate || ''}
+                  onChange={e => setSelectedDate(e.target.value)}
+                >
+                  {(() => {
+                    const groups = {};
+                    lezioniDate.forEach(d => {
+                      const key = format(parseISO(d), 'MMMM yyyy', { locale: it });
+                      if (!groups[key]) groups[key] = [];
+                      groups[key].push(d);
+                    });
+                    return Object.entries(groups).map(([month, dates]) => (
+                      <optgroup key={month} label={month.toUpperCase()}>
+                        {dates.map(d => (
+                          <option key={d} value={d}>
+                            {format(parseISO(d), 'EEEE dd MMMM', { locale: it })}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ));
+                  })()}
+                </select>
               </div>
-              <div style={{ flex: 1 }} />
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn btn-secondary btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={() => setAll('Presente')}><CheckCircle2 size={16} /> Tutti Presenti</button>
-                <button className="btn btn-secondary btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={() => setAll('Assente')}><XCircle size={16} /> Tutti Assenti</button>
-                <button className="btn btn-ghost btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={() => setPresenze({})}><RotateCcw size={16} /> Reset</button>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button className="btn btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#dcfce7', color: '#166534', border: '1px solid #86efac' }} onClick={() => setAll('Presente')}><CheckCircle2 size={15} /> Tutti Presenti</button>
+                <button className="btn btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }} onClick={() => setAll('Assente')}><XCircle size={15} /> Tutti Assenti</button>
+                <button className="btn btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }} onClick={() => setPresenze({})}><RotateCcw size={15} /> Reset</button>
               </div>
             </div>
             {studenti.length > 0 && (
@@ -213,56 +277,94 @@ export default function PresenzeTab({ corsoId, classeId, studenti }) {
               </button>
             </div>
           )}
+          </>
+          )}
         </>
       )}
 
       {viewMode === 'storico' && (
-        <>
-          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CalendarDays size={18} /> Ultime sessioni registrate
-          </h3>
-          {storico.length === 0 ? (
+        <div style={{ marginTop: 16 }}>
+{storico.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-title">Nessuna presenza registrata</div>
               <div className="empty-state-text">Inizia a registrare le presenze dalla vista Registro.</div>
             </div>
           ) : (
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <table>
-                <thead>
-                  <tr><th>Data</th><th>Presenti</th><th>Assenti</th><th>Frequenza</th><th style={{ width: 120 }}>Azione</th></tr>
-                </thead>
-                <tbody>
-                  {storico.map(s => {
-                    const tot = s.presenti + s.assenti;
-                    const perc = tot ? Math.round(s.presenti / tot * 100) : 0;
-                    return (
-                      <tr key={s.data}>
-                        <td style={{ fontWeight: 600 }}>{format(parseISO(s.data), 'EEEE d MMMM yyyy', { locale: it })}</td>
-                        <td><span className="badge badge-success" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><CheckCircle2 size={12} /> {s.presenti}</span></td>
-                        <td><span className="badge badge-danger" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><XCircle size={12} /> {s.assenti}</span></td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div style={{ flex: 1, background: 'var(--surface-el)', borderRadius: 20, height: 6, overflow: 'hidden', maxWidth: 80 }}>
-                              <div style={{ height: '100%', background: perc >= 75 ? 'var(--success)' : 'var(--danger)', width: `${perc}%`, borderRadius: 20 }} />
-                            </div>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: perc >= 75 ? 'var(--success)' : 'var(--danger)' }}>{perc}%</span>
-                          </div>
-                        </td>
-                        <td>
-                          <button className="btn btn-ghost btn-sm" style={{ display: 'flex', gap: 6, alignItems: 'center' }}
-                            onClick={() => { setSelectedDate(s.data); setViewMode('registro'); }}>
-                            <Edit2 size={14} /> Modifica
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {(() => {
+                const groups = {};
+                storico.forEach(s => {
+                  const key = format(parseISO(s.data), 'MMMM yyyy', { locale: it });
+                  if (!groups[key]) groups[key] = [];
+                  groups[key].push(s);
+                });
+                return Object.entries(groups).map(([month, sessioni]) => (
+                  <div key={month} style={{ marginBottom: 24 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+                      {month}
+                    </div>
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '35%' }}>Data</th>
+                            <th style={{ width: 90 }}>Presenti</th>
+                            <th style={{ width: 90 }}>Assenti</th>
+                            <th style={{ width: 140 }}>Frequenza</th>
+                            <th style={{ width: 52 }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sessioni.map(s => {
+                            const tot = s.presenti + s.assenti;
+                            const perc = tot ? Math.round(s.presenti / tot * 100) : 0;
+                            const lezione = lezioniByDate[s.data];
+                            const argomenti = lezione
+                              ? lezione.argomentiSelezionati
+                                ? Object.keys(lezione.argomentiSelezionati).map(id => programma[id]).filter(Boolean)
+                                : lezione.argomentoId && programma[lezione.argomentoId]
+                                  ? [programma[lezione.argomentoId]]
+                                  : lezione.note
+                                    ? [lezione.note]
+                                    : []
+                              : [];
+                            return (
+                              <tr key={s.data}>
+                                <td>
+                                  <span style={{ fontWeight: 600, fontSize: 14 }}>{format(parseISO(s.data), 'EEEE dd', { locale: it })}</span>
+                                  {argomenti.length > 0 && (
+                                    <span style={{ fontSize: 13, color: 'var(--text-2)', marginLeft: 8 }}>· {argomenti.join(' · ')}</span>
+                                  )}
+                                </td>
+                                <td><span className="badge badge-success" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><CheckCircle2 size={12} /> {s.presenti}</span></td>
+                                <td><span className="badge badge-danger" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><XCircle size={12} /> {s.assenti}</span></td>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <div style={{ flex: 1, background: 'var(--surface-el)', borderRadius: 20, height: 6, overflow: 'hidden', maxWidth: 80 }}>
+                                      <div style={{ height: '100%', background: perc >= 75 ? 'var(--success)' : 'var(--danger)', width: `${perc}%`, borderRadius: 20 }} />
+                                    </div>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: perc >= 75 ? 'var(--success)' : 'var(--danger)' }}>{perc}%</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <button
+                                    onClick={() => { setSelectedDate(s.data); setViewMode('registro'); }}
+                                    style={{ width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface-el)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <Edit2 size={13} color="var(--text-2)" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </>
           )}
-        </>
+        </div>
       )}
     </div>
   );

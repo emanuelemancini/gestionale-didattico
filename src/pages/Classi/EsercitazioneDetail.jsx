@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { doc, getDoc, getDocs, collection, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, setDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
@@ -27,10 +27,12 @@ function votoBg(v) {
 }
 
 export default function EsercitazioneDetail() {
-  const { corsoId, classeId, esId } = useParams();
+  const { corsoSlug, classeSlug, esId } = useParams();
   const { user } = useAuth();
   const toast = useToast();
 
+  const [corsoId, setCorsoId] = useState(null);
+  const [classeId, setClasseId] = useState(null);
   const [esercitazione, setEsercitazione] = useState(null);
   const [studenti, setStudenti] = useState([]);
   const [consegne, setConsegne] = useState({}); // { studenteId: { voto, feedback, file_url } }
@@ -38,15 +40,26 @@ export default function EsercitazioneDetail() {
   const [saving, setSaving] = useState({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { if (user) loadData(); }, [user, esId]);
+  useEffect(() => { if (user) loadData(); }, [user, corsoSlug, classeSlug, esId]);
 
   async function loadData() {
     setLoading(true);
     try {
+      // Risolvi corsoId e classeId dagli slug
+      const [corsiSnap, classiSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users', user.uid, 'corsi'), where('slug', '==', corsoSlug))),
+        getDocs(query(collection(db, 'users', user.uid, 'classi'), where('slug', '==', classeSlug))),
+      ]);
+      if (corsiSnap.empty || classiSnap.empty) return;
+      const resolvedCorsoId = corsiSnap.docs[0].id;
+      const resolvedClasseId = classiSnap.docs[0].id;
+      setCorsoId(resolvedCorsoId);
+      setClasseId(resolvedClasseId);
+
       const [esSnap, studentiSnap, consegneSnap] = await Promise.all([
-        getDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', esId)),
-        getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'studenti')),
-        getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', esId, 'consegne')),
+        getDoc(doc(db, 'users', user.uid, 'corsi', resolvedCorsoId, 'classi', resolvedClasseId, 'esercitazioni', esId)),
+        getDocs(collection(db, 'users', user.uid, 'classi', resolvedClasseId, 'studenti')),
+        getDocs(collection(db, 'users', user.uid, 'corsi', resolvedCorsoId, 'classi', resolvedClasseId, 'esercitazioni', esId, 'consegne')),
       ]);
 
       if (!esSnap.exists()) return;
@@ -270,7 +283,7 @@ export default function EsercitazioneDetail() {
 
         <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
           <Link
-            to={`/corsi/${corsoId}/classi/${classeId}?tab=esercitazioni`}
+            to={`/corsi/${corsoSlug}/classi/${classeSlug}?tab=esercitazioni`}
             style={{ color: 'var(--text-2)', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <ChevronLeft size={16} /> Torna alle esercitazioni

@@ -51,22 +51,22 @@ export default function App() {
             <Route path="/classi" element={
               <PrivateRoute><AppLayout><Classi /></AppLayout></PrivateRoute>
             } />
-            <Route path="/classi/:classeId" element={
+            <Route path="/classi/:classeSlug" element={
               <PrivateRoute><AppLayout><ClasseOverview /></AppLayout></PrivateRoute>
             } />
             <Route path="/corsi" element={
               <PrivateRoute><AppLayout><Corsi /></AppLayout></PrivateRoute>
             } />
-            <Route path="/corsi/:corsoId" element={
+            <Route path="/corsi/:corsoSlug" element={
               <PrivateRoute><AppLayout><CorsoDetail /></AppLayout></PrivateRoute>
             } />
-            <Route path="/corsi/:corsoId/classi/:classeId" element={
+            <Route path="/corsi/:corsoSlug/classi/:classeSlug" element={
               <PrivateRoute><AppLayout><ClasseDetail /></AppLayout></PrivateRoute>
             } />
-            <Route path="/corsi/:corsoId/classi/:classeId/esercitazioni/:esId" element={
+            <Route path="/corsi/:corsoSlug/classi/:classeSlug/esercitazioni/:esId" element={
               <PrivateRoute><AppLayout><EsercitazioneDetail /></AppLayout></PrivateRoute>
             } />
-            <Route path="/corsi/:corsoId/classi/:classeId/studenti/:studenteId" element={
+            <Route path="/corsi/:corsoSlug/classi/:classeSlug/studenti/:studenteId" element={
               <PrivateRoute><AppLayout><StudenteDetail /></AppLayout></PrivateRoute>
             } />
             <Route path="/economia" element={

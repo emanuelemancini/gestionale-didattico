@@ -21,6 +21,11 @@ const MODALITA = [
   { value: 'pratico', label: 'Pratico' },
 ];
 
+const MODALITA_CONSEGNA = [
+  { value: 'digitale',  label: 'Digitale' },
+  { value: 'cartacea',  label: 'Cartacea' },
+];
+
 const CONSEGNA_STATI = [null, 'consegnato', 'ritardo'];
 const CONSEGNA_CONFIG = {
   null:        { label: 'Da consegnare', icon: <Circle size={11} />,  color: 'var(--text-3)',    bg: 'var(--surface-el)',    border: 'var(--border)' },
@@ -61,13 +66,13 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   const [showProvaModal, setShowProvaModal] = useState(false);
   const [editProva, setEditProva] = useState(null);
   const [deleteProvaTarget, setDeleteProvaTarget] = useState(null);
-  const [provaForm, setProvaForm] = useState({ titolo: '', tipo: 'midtest', modalita: 'scritto', data: '' });
+  const [provaForm, setProvaForm] = useState({ titolo: '', descrizione: '', tipo: 'midtest', modalita: 'scritto', data: '' });
   const [savingProva, setSavingProva] = useState(false);
 
   // espansione sezioni
-  const [expandedEserc, setExpandedEserc] = useState(true);
-  const [expandedConsegne, setExpandedConsegne] = useState(true);
-  const [expandedProve, setExpandedProve] = useState(true);
+  const [expandedEserc, setExpandedEserc] = useState(false);
+  const [expandedConsegne, setExpandedConsegne] = useState(false);
+  const [expandedProve, setExpandedProve] = useState(false);
 
   // consegne items (nuova sezione)
   const [consegneItems, setConsegneItems] = useState([]);
@@ -75,7 +80,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   const [showConsegnaItemModal, setShowConsegnaItemModal] = useState(false);
   const [editConsegnaItem, setEditConsegnaItem] = useState(null);
   const [deleteConsegnaItemTarget, setDeleteConsegnaItemTarget] = useState(null);
-  const [consegnaItemForm, setConsegnaItemForm] = useState({ titolo: '', descrizione: '', data_scadenza: '' });
+  const [consegnaItemForm, setConsegnaItemForm] = useState({ titolo: '', descrizione: '', data_scadenza: '', modalita: [] });
   const [savingConsegnaItem, setSavingConsegnaItem] = useState(false);
 
   // pannello voti inline
@@ -403,7 +408,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
     if (!provaForm.titolo.trim()) { toast('Il titolo è obbligatorio', 'error'); return; }
     setSavingProva(true);
     try {
-      const payload = { titolo: provaForm.titolo.trim(), tipo: provaForm.tipo, modalita: provaForm.modalita, data: provaForm.data };
+      const payload = { titolo: provaForm.titolo.trim(), descrizione: provaForm.descrizione || '', tipo: provaForm.tipo, modalita: provaForm.modalita, data: provaForm.data };
       if (editProva) {
         await updateDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'prove', editProva.id), payload);
         toast('Prova aggiornata', 'success');
@@ -413,7 +418,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
       }
       setShowProvaModal(false);
       setEditProva(null);
-      setProvaForm({ titolo: '', tipo: 'midtest', modalita: 'scritto', data: '' });
+      setProvaForm({ titolo: '', descrizione: '', tipo: 'midtest', modalita: 'scritto', data: '' });
       loadData();
     } catch { toast('Errore', 'error'); } finally { setSavingProva(false); }
   };
@@ -436,8 +441,8 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   };
 
   // ── CRUD consegne items ──────────────────────────────────────────
-  const openCreateConsegnaItem = () => { setEditConsegnaItem(null); setConsegnaItemForm({ titolo: '', descrizione: '', data_scadenza: '' }); setShowConsegnaItemModal(true); };
-  const openEditConsegnaItem = (ci) => { setEditConsegnaItem(ci); setConsegnaItemForm({ titolo: ci.titolo, descrizione: ci.descrizione || '', data_scadenza: ci.data_scadenza || '' }); setShowConsegnaItemModal(true); };
+  const openCreateConsegnaItem = () => { setEditConsegnaItem(null); setConsegnaItemForm({ titolo: '', descrizione: '', data_scadenza: '', modalita: [] }); setShowConsegnaItemModal(true); };
+  const openEditConsegnaItem = (ci) => { setEditConsegnaItem(ci); setConsegnaItemForm({ titolo: ci.titolo, descrizione: ci.descrizione || '', data_scadenza: ci.data_scadenza || '', modalita: ci.modalita || [] }); setShowConsegnaItemModal(true); };
   const handleSaveConsegnaItem = async () => {
     if (!consegnaItemForm.titolo.trim()) { toast('Il titolo è obbligatorio', 'error'); return; }
     setSavingConsegnaItem(true);
@@ -477,11 +482,11 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
           {/* ── Colonna Esercitazioni ── */}
           <div>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedEserc(v => !v)}>
-              <span style={{ color: 'var(--text-3)', display: 'flex', marginRight: 8 }}>{expandedEserc ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Esercitazioni</span>
-              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{esercitazioni.length}</span>
-              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); openCreate(); }}>+ Nuova Esercitazione</button>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: '#dbeafe', border: '1px solid #93c5fd' }} onClick={() => setExpandedEserc(v => !v)}>
+              <span style={{ color: '#93c5fd', display: 'flex', marginRight: 8 }}>{expandedEserc ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1e3a8a' }}>Esercitazioni</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: '#93c5fd', color: '#1e3a8a', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{esercitazioni.length}</span>
+              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#93c5fd', color: '#1e3a8a', border: 'none' }} onClick={e => { e.stopPropagation(); openCreate(); }}>+ Nuova Esercitazione</button>
             </div>
             {!expandedEserc ? null : esercitazioni.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
@@ -504,30 +509,33 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
               return (
                 <div key={es.id} ref={el => cardRefs.current[es.id] = el}>
-                  <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14 }}>
+                  <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: '#eff6ff', border: '1px solid #dbeafe' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                       <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{es.titolo}</h3>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{es.titolo}</h3>
                         {scadenzaObj ? (
-                          <div style={{ fontSize: 12, color: scaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontSize: 12, color: scaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                             <CalendarDays size={13} />
                             Scadenza: {format(scadenzaObj, 'dd MMM yyyy', { locale: it })}
                             {scaduta && <span className="badge badge-danger">Scaduta</span>}
                           </div>
                         ) : (
-                          <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                             <CalendarDays size={13} /> Nessuna scadenza
                           </div>
                         )}
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#dbeafe', color: '#1e3a8a', border: '1px solid #93c5fd' }}>Esercitazione</span>
+                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => openEdit(es)}><Edit2 size={15} /></button>
+                        <button className="icon-btn" style={{ width: 30, height: 30, color: '#1e3a8a', background: '#dbeafe', border: '1px solid #93c5fd' }} onClick={() => openEdit(es)}><Edit2 size={15} /></button>
                         <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteTarget(es)}><Trash2 size={15} /></button>
                       </div>
                     </div>
 
                     <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {es.descrizione || 'Nessuna descrizione.'}
+                      {es.descrizione || 'Nessuna descrizione'}
                     </p>
 
                     <div style={{ marginBottom: 14 }}>
@@ -535,15 +543,15 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                         <span style={{ color: 'var(--text-2)' }}>Consegnato</span>
                         <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
                       </div>
-                      <div style={{ background: 'var(--surface-el)', borderRadius: 20, height: 6, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', background: progConsegne === 100 ? 'var(--success)' : 'var(--accent)', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                      <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
+                        <div style={{ height: '100%', background: '#93c5fd', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
                       </div>
                     </div>
 
                     <button
                       onClick={() => openPanel(es.id)}
-                      className={isSelected ? 'btn btn-secondary' : 'btn btn-primary'}
-                      style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center' }}
+                      className='btn btn-sm'
+                      style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isSelected ? { background: '#dbeafe', color: '#1e3a8a', border: '1px solid #93c5fd' } : { background: '#93c5fd', color: '#1e3a8a', border: 'none' }) }}
                     >
                       {isSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
                     </button>
@@ -551,19 +559,17 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
                   {/* Pannello inline */}
                   {isSelected && (
-                    <div ref={panelRef} style={{ border: '1px solid var(--accent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)' }}>
+                    <div ref={panelRef} style={{ border: '1px solid #93c5fd', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)', margin: '0 20px' }}>
                       {/* Header */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #93c5fd', background: '#dbeafe' }}>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{es.titolo}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: '#1e3a8a' }}>{es.titolo}</div>
+                          <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 2 }}>
                             {Object.values(consegne).filter(c => c.consegnaStato === 'consegnato').length} consegnati · {Object.values(consegne).filter(c => c.consegnaStato === 'ritardo').length} in ritardo · {Object.values(consegne).filter(c => c.voto !== null && c.voto !== undefined).length} voti inseriti
                           </div>
                         </div>
                         <button onClick={() => { setSelectedEsId(null); setEditingCell(null); }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4, borderRadius: 6 }}
-                          onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e3a8a', display: 'flex', padding: 4, borderRadius: 6 }}
                         >
                           <X size={15} />
                         </button>
@@ -579,9 +585,9 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                           <thead>
                             <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-el)' }}>
-                              <th style={{ textAlign: 'left', padding: '7px 14px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)' }}>Studente</th>
-                              <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 100 }}>Consegna</th>
-                              <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 110 }}>Voto</th>
+                              <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>Studente</th>
+                              <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 100 }}>Consegna</th>
+                              <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 110 }}>Voto</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -591,7 +597,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                               const haVoto = c.voto !== null && c.voto !== undefined;
 
                               return (
-                                <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--surface-el) 40%, transparent)' }}>
+                                <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-el)' }}>
                                   {/* Nome */}
                                   <td style={{ padding: '8px 14px', fontWeight: 500 }}>{s.cognome} {s.nome}</td>
 
@@ -653,11 +659,11 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
             )}
           {/* ── Consegne (sotto esercitazioni) ── */}
           <div style={{ marginTop: 24 }}>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedConsegne(v => !v)}>
-              <span style={{ color: 'var(--text-3)', display: 'flex', marginRight: 8 }}>{expandedConsegne ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Consegne</span>
-              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{consegneItems.length}</span>
-              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); openCreateConsegnaItem(); }}>+ Nuova Consegna</button>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: '#ffedd5', border: '1px solid #fdba74' }} onClick={() => setExpandedConsegne(v => !v)}>
+              <span style={{ color: '#fdba74', display: 'flex', marginRight: 8 }}>{expandedConsegne ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#7c2d12' }}>Consegne</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: '#fdba74', color: '#7c2d12', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{consegneItems.length}</span>
+              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#fdba74', color: '#7c2d12', border: 'none' }} onClick={e => { e.stopPropagation(); openCreateConsegnaItem(); }}>+ Nuova Consegna</button>
             </div>
             {!expandedConsegne ? null : consegneItems.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
@@ -679,43 +685,51 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                   const isSelected = ci.id === selectedConsegnaId;
                   return (
                     <div key={ci.id} ref={el => consegnaItemCardRefs.current[ci.id] = el}>
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14 }}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: '#fff7ed', border: '1px solid #ffedd5' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                           <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{ci.titolo}</h3>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{ci.titolo}</h3>
                             {scadenzaObj ? (
-                              <div style={{ fontSize: 12, color: scaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ fontSize: 12, color: scaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                                 <CalendarDays size={13} />
                                 Scadenza: {format(scadenzaObj, 'dd MMM yyyy', { locale: it })}
                                 {scaduta && <span className="badge badge-danger">Scaduta</span>}
                               </div>
                             ) : (
-                              <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                                 <CalendarDays size={13} /> Nessuna scadenza
                               </div>
                             )}
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' }}>Consegna</span>
+                              {(ci.modalita || []).map(m => (
+                                <span key={m} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' }}>
+                                  {MODALITA_CONSEGNA.find(x => x.value === m)?.label || m}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => openEditConsegnaItem(ci)}><Edit2 size={15} /></button>
+                            <button className="icon-btn" style={{ width: 30, height: 30, color: '#7c2d12', background: '#ffedd5', border: '1px solid #fdba74' }} onClick={() => openEditConsegnaItem(ci)}><Edit2 size={15} /></button>
                             <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteConsegnaItemTarget(ci)}><Trash2 size={15} /></button>
                           </div>
                         </div>
                         <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {ci.descrizione || 'Nessuna descrizione.'}
+                          {ci.descrizione || 'Nessuna descrizione'}
                         </p>
                         <div style={{ marginBottom: 14 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
                             <span style={{ color: 'var(--text-2)' }}>Consegnato</span>
                             <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
                           </div>
-                          <div style={{ background: 'var(--surface-el)', borderRadius: 20, height: 6, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', background: progConsegne === 100 ? 'var(--success)' : 'var(--accent)', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                          <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
+                            <div style={{ height: '100%', background: '#fdba74', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
                           </div>
                         </div>
                         <button
                           onClick={() => openConsegnaItemPanel(ci.id)}
-                          className={isSelected ? 'btn btn-secondary' : 'btn btn-primary'}
-                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center' }}
+                          className='btn btn-sm'
+                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isSelected ? { background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' } : { background: '#fdba74', color: '#7c2d12', border: 'none' }) }}
                         >
                           {isSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
                         </button>
@@ -723,18 +737,16 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
                       {/* Pannello inline consegna */}
                       {isSelected && (
-                        <div style={{ border: '1px solid var(--accent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
+                        <div style={{ border: '1px solid #fdba74', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)', margin: '0 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #fdba74', background: '#ffedd5' }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{ci.titolo}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: 16, color: '#7c2d12' }}>{ci.titolo}</div>
+                              <div style={{ fontSize: 12, color: '#f97316', marginTop: 2 }}>
                                 {Object.values(consegne).filter(c => c.consegnaStato === 'consegnato').length} consegnati · {Object.values(consegne).filter(c => c.consegnaStato === 'ritardo').length} in ritardo · {Object.values(consegne).filter(c => c.voto !== null && c.voto !== undefined).length} voti inseriti
                               </div>
                             </div>
                             <button onClick={() => { setSelectedConsegnaId(null); setEditingCell(null); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4, borderRadius: 6 }}
-                              onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
-                              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c2d12', display: 'flex', padding: 4, borderRadius: 6 }}
                             >
                               <X size={15} />
                             </button>
@@ -749,9 +761,9 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                               <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-el)' }}>
-                                  <th style={{ textAlign: 'left', padding: '7px 14px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)' }}>Studente</th>
-                                  <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 100 }}>Consegna</th>
-                                  <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 110 }}>Voto</th>
+                                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>Studente</th>
+                                  <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 100 }}>Consegna</th>
+                                  <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 110 }}>Voto</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -760,7 +772,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                                   const isEditing = editingCell === s.id;
                                   const haVoto = c.voto !== null && c.voto !== undefined;
                                   return (
-                                    <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--surface-el) 40%, transparent)' }}>
+                                    <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-el)' }}>
                                       <td style={{ padding: '8px 14px', fontWeight: 500 }}>{s.cognome} {s.nome}</td>
                                       <td style={{ textAlign: 'center', padding: '8px 10px' }}>
                                         {(() => {
@@ -813,11 +825,11 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
           {/* ── Colonna Prove ── */}
           <div>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedProve(v => !v)}>
-              <span style={{ color: 'var(--text-3)', display: 'flex', marginRight: 8 }}>{expandedProve ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Prove</span>
-              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{prove.length}</span>
-              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); setEditProva(null); setProvaForm({ titolo: '', tipo: 'midtest', modalita: 'scritto', data: new Date().toISOString().slice(0,10) }); setShowProvaModal(true); }}>+ Nuova Prova</button>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: '#fee2e2', border: '1px solid #fca5a5' }} onClick={() => setExpandedProve(v => !v)}>
+              <span style={{ color: '#fca5a5', display: 'flex', marginRight: 8 }}>{expandedProve ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#7f1d1d' }}>Prove</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: '#fca5a5', color: '#7f1d1d', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{prove.length}</span>
+              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#fca5a5', color: '#7f1d1d', border: 'none' }} onClick={e => { e.stopPropagation(); setEditProva(null); setProvaForm({ titolo: '', descrizione: '', tipo: 'midtest', modalita: 'scritto', data: new Date().toISOString().slice(0,10) }); setShowProvaModal(true); }}>+ Nuova Prova</button>
             </div>
             {!expandedProve ? null : prove.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
@@ -832,50 +844,58 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                   const isProvaSelected = p.id === selectedProvaId;
                   return (
                     <div key={p.id} ref={el => provaCardRefs.current[p.id] = el}>
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isProvaSelected ? '14px 14px 0 0' : 14 }}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isProvaSelected ? '14px 14px 0 0' : 14, background: '#fff5f5', border: '1px solid #fee2e2' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                           <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{p.titolo}</h3>
-                            {p.data ? (
-                              <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <CalendarDays size={13} />
-                                {new Date(p.data + 'T12:00:00').toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <CalendarDays size={13} /> Nessuna data
-                              </div>
-                            )}
+                            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{p.titolo}</h3>
+                            {(() => {
+                              const provaData = p.data ? new Date(p.data + 'T12:00:00') : null;
+                              const provaScaduta = provaData ? provaData < new Date(new Date().setHours(0,0,0,0)) : false;
+                              return provaData ? (
+                                <div style={{ fontSize: 12, color: provaScaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                  <CalendarDays size={13} />
+                                  {provaData.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  {provaScaduta && <span className="badge badge-danger">Scaduta</span>}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                  <CalendarDays size={13} /> Nessuna data
+                                </div>
+                              );
+                            })()}
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
+                                {TIPI_PROVA.find(t => t.value === p.tipo)?.label || p.tipo}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
+                                {MODALITA.find(m => m.value === p.modalita)?.label || p.modalita}
+                              </span>
+                            </div>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => { setEditProva(p); setProvaForm({ titolo: p.titolo, tipo: p.tipo, modalita: p.modalita, data: p.data || '' }); setShowProvaModal(true); }}><Edit2 size={15} /></button>
+                            <button className="icon-btn" style={{ width: 30, height: 30, color: '#7f1d1d', background: '#fee2e2', border: '1px solid #fca5a5' }} onClick={() => { setEditProva(p); setProvaForm({ titolo: p.titolo, descrizione: p.descrizione || '', tipo: p.tipo, modalita: p.modalita, data: p.data || '' }); setShowProvaModal(true); }}><Edit2 size={15} /></button>
                             <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteProvaTarget(p)}><Trash2 size={15} /></button>
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--accent)15', color: 'var(--accent)' }}>
-                            {TIPI_PROVA.find(t => t.value === p.tipo)?.label || p.tipo}
-                          </span>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--surface-el)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                            {MODALITA.find(m => m.value === p.modalita)?.label || p.modalita}
-                          </span>
-                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {p.descrizione || 'Nessuna descrizione'}
+                        </p>
 
                         <div style={{ marginBottom: 14 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
                             <span style={{ color: 'var(--text-2)' }}>Voti inseriti</span>
                             <span style={{ fontWeight: 600 }}>{votiCount} / {studentiCount}</span>
                           </div>
-                          <div style={{ background: 'var(--surface-el)', borderRadius: 20, height: 6, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', background: progVoti === 100 ? 'var(--success)' : 'var(--accent)', width: `${progVoti}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                          <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
+                            <div style={{ height: '100%', background: '#fca5a5', width: `${progVoti}%`, borderRadius: 20, transition: 'width 0.3s' }} />
                           </div>
                         </div>
 
                         <button
                           onClick={() => openProvaPanel(p.id)}
-                          className={isProvaSelected ? 'btn btn-secondary' : 'btn btn-primary'}
-                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center' }}
+                          className='btn btn-sm'
+                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isProvaSelected ? { background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' } : { background: '#fca5a5', color: '#7f1d1d', border: 'none' }) }}
                         >
                           {isProvaSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
                         </button>
@@ -883,18 +903,16 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
                       {/* Pannello inline prova */}
                       {isProvaSelected && (
-                        <div style={{ border: '1px solid var(--accent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
+                        <div style={{ border: '1px solid #fca5a5', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)', margin: '0 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #fca5a5', background: '#fee2e2' }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{p.titolo}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: 16, color: '#7f1d1d' }}>{p.titolo}</div>
+                              <div style={{ fontSize: 12, color: '#ef4444', marginTop: 2 }}>
                                 {Object.keys(provaVoti).length} voti inseriti
                               </div>
                             </div>
                             <button onClick={() => { setSelectedProvaId(null); setEditingCell(null); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4, borderRadius: 6 }}
-                              onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
-                              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7f1d1d', display: 'flex', padding: 4, borderRadius: 6 }}
                             >
                               <X size={15} />
                             </button>
@@ -910,8 +928,8 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                               <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-el)' }}>
-                                  <th style={{ textAlign: 'left', padding: '7px 14px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)' }}>Studente</th>
-                                  <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 110 }}>Voto</th>
+                                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>Studente</th>
+                                  <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 110 }}>Voto</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -922,7 +940,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                                   const isEditing = editingCell === s.id;
 
                                   return (
-                                    <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--surface-el) 40%, transparent)' }}>
+                                    <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-el)' }}>
                                       <td style={{ padding: '8px 14px', fontWeight: 500 }}>{s.cognome} {s.nome}</td>
                                       <td style={{ textAlign: 'center', padding: '6px 10px', cursor: 'pointer' }}
                                         onClick={() => {
@@ -1033,9 +1051,13 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
                 </select>
               </div>
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group">
               <label className="form-label">Data</label>
               <input className="form-input" type="date" value={provaForm.data} onChange={e => setProvaForm(f => ({ ...f, data: e.target.value }))} />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Descrizione / Note</label>
+              <textarea className="form-input" rows={3} placeholder="Dettagli sulla prova..." value={provaForm.descrizione} onChange={e => setProvaForm(f => ({ ...f, descrizione: e.target.value }))} />
             </div>
           </Modal>
         )}
@@ -1062,6 +1084,26 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
             <div className="form-group">
               <label className="form-label">Scadenza (Opzionale)</label>
               <input type="date" className="form-input" value={consegnaItemForm.data_scadenza} onChange={e => setConsegnaItemForm(f => ({ ...f, data_scadenza: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Modalità</label>
+              <div style={{ display: 'flex', gap: 16 }}>
+                {MODALITA_CONSEGNA.map(m => (
+                  <label key={m.value} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={(consegnaItemForm.modalita || []).includes(m.value)}
+                      onChange={() => setConsegnaItemForm(f => {
+                        const prev = f.modalita || [];
+                        const next = prev.includes(m.value) ? prev.filter(v => v !== m.value) : [...prev, m.value];
+                        return { ...f, modalita: next };
+                      })}
+                      style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }}
+                    />
+                    {m.label}
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Descrizione / Note</label>

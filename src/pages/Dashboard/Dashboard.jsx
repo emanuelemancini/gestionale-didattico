@@ -86,6 +86,8 @@ export default function Dashboard() {
       getDocs(collection(db, 'users', user.uid, 'corsi')),
     ]);
     const classiMap = Object.fromEntries(classiSnap.docs.map(d => [d.id, d.data().nome]));
+    const classiSlugMap = Object.fromEntries(classiSnap.docs.map(d => [d.id, d.data().slug || d.id]));
+    const corsiSlugMap = Object.fromEntries(corsiSnap.docs.map(d => [d.id, d.data().slug || d.id]));
 
     // Carica programma per ogni coppia unica (corsoId, classeId) per risolvere argomenti → titoli
     const pairs = new Map();
@@ -118,6 +120,8 @@ export default function Dashboard() {
         id: d.id,
         ...data,
         nomeClasse: classiMap[data.classeId] || '',
+        classeSlug: classiSlugMap[data.classeId] || data.classeId,
+        corsoSlug: corsiSlugMap[data.corsoId] || data.corsoId,
         argomentoTitolo,
         dataDate: data.dataDate?.toDate ? data.dataDate.toDate() : new Date(data.data + 'T12:00:00'),
       };
@@ -219,6 +223,8 @@ export default function Dashboard() {
                 const classeDoc = classiDocs.find(c => c.id === jDoc.id);
                 scadenze.push({
                   id: e.id, classeId: jDoc.id, corsoId: corso.id,
+                  classeSlug: classeDoc?.data().slug || jDoc.id,
+                  corsoSlug: corso.slug || corso.id,
                   nomeClasse: classeDoc?.data().nome || corso.nomeCorso,
                   ...d, scadDate: scad,
                 });
@@ -953,8 +959,8 @@ export default function Dashboard() {
                                 {/* Riga 5: bottoni azione */}
                                 <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:12, borderTop:'1px solid var(--border)' }}>
                                   {[
-                                    { icon: <BookOpen size={14} />, label:'Apri corso', as:'link', to:`/corsi/${l.corsoId}`, saveId: l.id },
-                                    { icon: <GraduationCap size={14} />, label:'Apri classe', as:'link', to:`/classi/${l.classeId}`, saveId: l.id },
+                                    { icon: <BookOpen size={14} />, label:'Apri corso', as:'link', to:`/corsi/${l.corsoSlug || l.corsoId}`, saveId: l.id },
+                                    { icon: <GraduationCap size={14} />, label:'Apri classe', as:'link', to:`/classi/${l.classeSlug || l.classeId}`, saveId: l.id },
                                     { icon: <Pencil size={14} />, label:'Modifica', as:'btn', onClick:() => openEdit(l) },
                                     { icon: <Trash2 size={14} />, label:'Elimina', as:'btn', onClick:() => handleDelete(l), danger:true },
                                   ].map((a, i) => a.as === 'link' ? (
@@ -1026,7 +1032,7 @@ export default function Dashboard() {
                       return (
                         <tr key={s.id}>
                           <td>
-                            <Link to={`/corsi/${s.corsoId}/classi/${s.classeId}`} style={{ fontWeight:600, fontSize:13, color:'var(--text)', textDecoration:'none' }}>
+                            <Link to={`/corsi/${s.corsoSlug || s.corsoId}/classi/${s.classeSlug || s.classeId}`} style={{ fontWeight:600, fontSize:13, color:'var(--text)', textDecoration:'none' }}>
                               {s.titolo}
                             </Link>
                           </td>

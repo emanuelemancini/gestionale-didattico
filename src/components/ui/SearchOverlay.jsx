@@ -28,13 +28,14 @@ export default function SearchOverlay({ onClose }) {
 
       let studentiMatch = [];
       for (const cl of classiSnap.docs) {
+        const clData = cl.data();
         const sSnap = await getDocs(collection(db, 'users', user.uid, 'classi', cl.id, 'studenti'));
         const found = sSnap.docs
           .filter(d => {
             const { nome, cognome } = d.data();
             return [nome, cognome].some(v => v?.toLowerCase().includes(q));
           })
-          .map(d => ({ id: d.id, classeId: cl.id, nomeClasse: cl.data().nome || cl.id, ...d.data() }));
+          .map(d => ({ id: d.id, classeId: cl.id, classeSlug: clData.slug || cl.id, nomeClasse: clData.nome || cl.id, ...d.data() }));
         studentiMatch.push(...found);
         if (studentiMatch.length >= 5) break;
       }
@@ -71,7 +72,7 @@ export default function SearchOverlay({ onClose }) {
             <>
               <div className="search-group-label">Classi</div>
               {results.classi.map(c => (
-                <div key={c.id} className="search-result-item" onClick={() => go(`/classi/${c.id}`)}>
+                <div key={c.id} className="search-result-item" onClick={() => go(`/classi/${c.slug || c.id}`)}>
                   <span style={{ display:'flex', alignItems:'center', color:'var(--accent)' }}><GraduationCap size={18} /></span>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{c.nome}</div>
@@ -85,7 +86,7 @@ export default function SearchOverlay({ onClose }) {
             <>
               <div className="search-group-label">Studenti</div>
               {results.studenti.map(s => (
-                <div key={s.id} className="search-result-item" onClick={() => go(`/classi/${s.classeId}`)}>
+                <div key={s.id} className="search-result-item" onClick={() => go(`/classi/${s.classeSlug || s.classeId}`)}>
                   <span style={{ display:'flex', alignItems:'center', color:'var(--accent)' }}><User size={18} /></span>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{s.nome} {s.cognome}</div>

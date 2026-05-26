@@ -80,6 +80,7 @@ export default function Statistiche({ hideHeader = false }) {
             nome: s.data().nome,
             cognome: s.data().cognome,
             classeId: cl.id,
+            classeSlug: classiDataMap[cl.id]?.slug || cl.id,
             classeNome: classiDataMap[cl.id]?.nome || cl.id,
             votiSum: 0, votiCount: 0,
             presenze: 0, assenze: 0
@@ -374,7 +375,7 @@ export default function Statistiche({ hideHeader = false }) {
                     {data.topPerformers.map((s, i) => (
                       <tr key={i}>
                         <td style={{ fontWeight: 600 }}>
-                          <Link to={`/classi/${s.classeId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                          <Link to={`/classi/${s.classeSlug || s.classeId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                             {s.cognome} {s.nome}
                           </Link>
                         </td>
@@ -406,7 +407,7 @@ export default function Statistiche({ hideHeader = false }) {
                       return (
                         <tr key={i}>
                           <td style={{ fontWeight: 600 }}>
-                            <Link to={`/classi/${s.classeId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <Link to={`/classi/${s.classeSlug || s.classeId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                               {s.cognome} {s.nome}
                             </Link>
                           </td>

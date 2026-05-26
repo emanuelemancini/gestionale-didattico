@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { toUniqueSlug } from '../../utils/slug';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
@@ -42,6 +43,20 @@ export default function Classi() {
     try {
       const snap = await getDocs(collection(db, 'users', user.uid, 'classi'));
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // Migrazione: genera slug per le classi che non ce l'hanno ancora
+      const existingSlugs = docs.map(d => d.slug).filter(Boolean);
+      const toMigrate = docs.filter(d => !d.slug);
+      if (toMigrate.length > 0) {
+        const accumulated = [...existingSlugs];
+        await Promise.all(toMigrate.map(async c => {
+          const slug = toUniqueSlug(c.nome, accumulated);
+          accumulated.push(slug);
+          await updateDoc(doc(db, 'users', user.uid, 'classi', c.id), { slug });
+          c.slug = slug;
+        }));
+      }
+
       setClassi(docs);
       const results = await Promise.all(
         docs.map(cl =>
@@ -76,8 +91,12 @@ export default function Classi() {
         await updateDoc(doc(db, 'users', user.uid, 'classi', editClasse.id), form);
         toast('Classe aggiornata', 'success');
       } else {
+        // Genera slug unico alla creazione
+        const snapAll = await getDocs(collection(db, 'users', user.uid, 'classi'));
+        const existingSlugs = snapAll.docs.map(d => d.data().slug).filter(Boolean);
+        const slug = toUniqueSlug(form.nome, existingSlugs);
         await addDoc(collection(db, 'users', user.uid, 'classi'), {
-          ...form, createdAt: serverTimestamp()
+          ...form, slug, createdAt: serverTimestamp()
         });
         toast('Classe creata!', 'success');
       }
@@ -116,12 +135,9 @@ export default function Classi() {
       <Header
         title="Tutte le Classi"
         subtitle="Gestisci le classi con i relativi studenti iscritti."
-        actions={
-          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi classe</button>
-        }
       />
       <div className="page fade-in">
-        {/* Barra ricerca */}
+        {/* Barra ricerca + pulsante */}
         <div className="card" style={{ padding: '14px 16px', marginBottom: 24, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
@@ -133,6 +149,7 @@ export default function Classi() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
+          <button className="btn btn-primary" onClick={openCreate}>+ Aggiungi classe</button>
         </div>
 
         {loading ? (
@@ -189,7 +206,7 @@ export default function Classi() {
                     </div>
                   </div>
 
-                  <Link to={`/classi/${cl.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+                  <Link to={`/classi/${cl.slug || cl.id}`} style={{ textDecoration: 'none', display: 'block' }}>
                     {cl.istituzione && (
                       <div style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
                         <Building2 size={13} style={{ flexShrink: 0 }} />
@@ -234,6 +251,11 @@ export default function Classi() {
             <label className="form-label">Nome Classe *</label>
             <input className="form-input" placeholder="es. 3A"
               value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+            {!editClasse && (
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                ⚠️ Scegli bene il nome: una volta creata la classe, l&apos;URL non potrà essere modificato.
+              </div>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">Istituzione</label>

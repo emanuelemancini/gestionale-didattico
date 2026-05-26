@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
+import { toUniqueSlug } from '../../utils/slug';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
@@ -12,7 +13,7 @@ import Tesseract from 'tesseract.js';
 import {
   FolderUp, Camera, Download, User, Trash2, PenTool,
   CheckCircle2, Hourglass, FileText, Calendar, BookOpen, Clock,
-  ChevronLeft, ChevronDown, ChevronRight, BarChart2, Users, CheckSquare, Square, Edit2, Plus, GripVertical, Check
+  ChevronLeft, ChevronDown, ChevronRight, BarChart2, Users, CheckSquare, Square, Edit2, Plus, GripVertical, Check, ClipboardList
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -68,18 +69,23 @@ const TABS = [
 ];
 
 export default function ClasseDetail() {
-  const { corsoId, classeId } = useParams();
+  const { corsoSlug, classeSlug } = useParams();
+  // corsoId e classeId vengono risolti dallo slug durante loadData
+  const [corsoId, setCorsoId] = useState(null);
+  const [classeId, setClasseId] = useState(null);
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [corso, setCorso] = useState(null);
   const [classe, setClasse] = useState(null);
   const [studenti, setStudenti] = useState([]);
   const [lezioni, setLezioni] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(() => sessionStorage.getItem(`classe_tab_${classeId}`) || 'lezioni');
-  useEffect(() => { sessionStorage.setItem(`classe_tab_${classeId}`, tab); }, [tab, classeId]);
+
+  const tab = searchParams.get('tab') || 'lezioni';
+  const setTab = (newTab) => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('tab', newTab); return p; }, { replace: false });
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -97,6 +103,7 @@ export default function ClasseDetail() {
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [editLesson, setEditLesson] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState({});
+  const [presenzeInitialDate, setPresenzeInitialDate] = useState(null);
   const [programma, setProgramma] = useState([]);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [editTopic, setEditTopic] = useState(null);
@@ -112,33 +119,41 @@ export default function ClasseDetail() {
   const [editingSub, setEditingSub] = useState(null); // { topicId, subId }
   const [editSubValue, setEditSubValue] = useState('');
 
-  useEffect(() => { loadData(); }, [corsoId, classeId, user]);
+  useEffect(() => { loadData(); }, [corsoSlug, classeSlug, user]);
 
   const loadData = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // Carica corso
-      const corsoDoc = await getDoc(doc(db, 'users', user.uid, 'corsi', corsoId));
-      if (!corsoDoc.exists()) { navigate('/corsi'); return; }
+      // Risolvi corsoId dallo slug
+      const corsiQ = query(collection(db, 'users', user.uid, 'corsi'), where('slug', '==', corsoSlug));
+      const corsiSnap = await getDocs(corsiQ);
+      if (corsiSnap.empty) { navigate('/corsi'); return; }
+      const corsoDoc = corsiSnap.docs[0];
+      const resolvedCorsoId = corsoDoc.id;
+      setCorsoId(resolvedCorsoId);
       setCorso({ id: corsoDoc.id, ...corsoDoc.data() });
 
-      // Carica classe pura
-      const clDoc = await getDoc(doc(db, 'users', user.uid, 'classi', classeId));
-      if (!clDoc.exists()) { navigate(`/corsi/${corsoId}`); return; }
+      // Risolvi classeId dallo slug
+      const classiQ = query(collection(db, 'users', user.uid, 'classi'), where('slug', '==', classeSlug));
+      const classiSnap = await getDocs(classiQ);
+      if (classiSnap.empty) { navigate(`/corsi/${corsoSlug}`); return; }
+      const clDoc = classiSnap.docs[0];
+      const resolvedClasseId = clDoc.id;
+      setClasseId(resolvedClasseId);
       setClasse({ id: clDoc.id, ...clDoc.data() });
 
       const [sSnap, lSnap, pSnap] = await Promise.all([
         // Studenti: dalla classe pura
-        getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'studenti')),
+        getDocs(collection(db, 'users', user.uid, 'classi', resolvedClasseId, 'studenti')),
         // Lezioni: root filtrate per corsoId e classeId
         getDocs(query(
           collection(db, 'users', user.uid, 'lezioni'),
-          where('corsoId', '==', corsoId),
-          where('classeId', '==', classeId)
+          where('corsoId', '==', resolvedCorsoId),
+          where('classeId', '==', resolvedClasseId)
         )),
         // Programma: dalla junction
-        getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma')),
+        getDocs(collection(db, 'users', user.uid, 'corsi', resolvedCorsoId, 'classi', resolvedClasseId, 'programma')),
       ]);
       setStudenti(sSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.cognome || '').localeCompare(b.cognome || '')));
       setLezioni(lSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.data || '').localeCompare(b.data || '')));
@@ -497,7 +512,7 @@ export default function ClasseDetail() {
     <div className="page fade-in" style={{ paddingTop: 0 }}>
       {/* ── Breadcrumb + Header ───────────────────────────────── */}
       <div style={{ paddingTop: 24, paddingBottom: 0, position: 'sticky', top: 0, zIndex: 100, background: 'var(--bg)', marginLeft: -28, marginRight: -28, paddingLeft: 28, paddingRight: 28 }}>
-        <Link to={`/corsi/${corsoId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-2)', textDecoration: 'none', marginBottom: 12 }}>
+        <Link to={`/corsi/${corsoSlug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-2)', textDecoration: 'none', marginBottom: 12 }}>
           <ChevronLeft size={16} /> Torna al Corso
         </Link>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
@@ -738,6 +753,7 @@ export default function ClasseDetail() {
                 </div>
               ) : (() => {
                 // Raggruppa per mese
+                const currentMonthKey = format(new Date(), 'yyyy-MM');
                 const grouped = {};
                 lezioni.forEach(lez => {
                   const key = lez.data.substring(0, 7); // 'yyyy-MM'
@@ -746,13 +762,17 @@ export default function ClasseDetail() {
                 });
                 const sortedKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a)); // mesi più recenti prima
                 return sortedKeys.map(monthKey => {
-                  const isOpen = expandedMonths[monthKey] !== false; // default espanso
-                  const meseLezList = grouped[monthKey];
+                  // Default: aperto solo il mese corrente
+                  const isOpen = expandedMonths[monthKey] !== undefined
+                    ? expandedMonths[monthKey]
+                    : monthKey === currentMonthKey;
+                  const isPastMonth = monthKey < currentMonthKey;
+                  const meseLezList = [...grouped[monthKey]].sort((a, b) => b.data.localeCompare(a.data) || b.oraInizio.localeCompare(a.oraInizio));
                   const [yyyy, mm] = monthKey.split('-');
                   const meseLabelFull = format(new Date(parseInt(yyyy), parseInt(mm) - 1, 1), 'MMMM yyyy', { locale: it });
                   const meseLabel = meseLabelFull.charAt(0).toUpperCase() + meseLabelFull.slice(1);
                   return (
-                    <div key={monthKey}>
+                    <div key={monthKey} style={{ opacity: isPastMonth ? 0.45 : 1, transition: 'opacity 0.15s' }}>
                       {/* Header mese */}
                       <button
                         onClick={() => setExpandedMonths(prev => ({ ...prev, [monthKey]: !isOpen }))}
@@ -789,8 +809,8 @@ export default function ClasseDetail() {
                             const durataOre = lez.durata ? (() => {
                               const h = Math.floor(lez.durata / 60);
                               const m = lez.durata % 60;
-                              if (m === 0) return `${h}h`;
-                              return `${h}h ${m}min`;
+                              if (m === 0) return `${h} ${h === 1 ? 'ora' : 'ore'}`;
+                              return `${h} ${h === 1 ? 'ora' : 'ore'} ${m}min`;
                             })() : null;
                             return (
                               <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
@@ -804,18 +824,21 @@ export default function ClasseDetail() {
                                   <div style={{ fontSize: 22, fontWeight: 800, color: past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                                    {titoloRighe.map((riga, i) => (
-                                      <div key={i} style={{ lineHeight: 1.4 }}>{riga}</div>
-                                    ))}
+                                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span style={{ display: 'flex', flexDirection: 'column' }}>
+                                      {titoloRighe.map((riga, i) => (
+                                        <span key={i} style={{ lineHeight: 1.4 }}>{riga}</span>
+                                      ))}
+                                    </span>
+                                    <span className={`badge ${past ? 'badge-success' : 'badge-blue'}`} style={{ flexShrink: 0 }}>{past ? 'Svolta' : 'In programma'}</span>
                                   </div>
                                   <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', gap: 12 }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={12} /> {lez.oraInizio}–{lez.oraFine}</span>
                                     {durataOre && <span>{durataOre}</span>}
                                   </div>
                                 </div>
-                                <span className={`badge ${past ? 'badge-success' : 'badge-blue'}`}>{past ? 'Svolta' : 'In programma'}</span>
-                                <button className="btn btn-ghost btn-sm" title="Modifica" onClick={() => { setEditLesson(lez); setShowLessonModal(true); }}><Edit2 size={15} /></button>
+                                <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={() => { setPresenzeInitialDate(lez.data); setTab('presenze'); }}><ClipboardList size={14} /> Presenze</button>
+                                <button title="Modifica" onClick={() => { setEditLesson(lez); setShowLessonModal(true); }} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface-el)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-2)', flexShrink: 0 }}><Edit2 size={14} /></button>
                               </div>
                             );
                           })}
@@ -866,7 +889,7 @@ export default function ClasseDetail() {
                             <td style={{ color: 'var(--text-2)', fontSize: 13 }}>{s.email || '—'}</td>
                             <td>
                               <div style={{ display: 'flex', gap: 6 }}>
-                                <Link to={`/corsi/${corsoId}/classi/${classeId}/studenti/${s.id}`} className="btn btn-ghost btn-sm" title="Scheda"><User size={16} /></Link>
+                                <Link to={`/corsi/${corsoSlug}/classi/${classeSlug}/studenti/${s.id}`} className="btn btn-ghost btn-sm" title="Scheda"><User size={16} /></Link>
                                 <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(s)}><Trash2 size={16} /></button>
                               </div>
                             </td>
@@ -882,7 +905,7 @@ export default function ClasseDetail() {
 
           {/* PRESENZE */}
           {tab === 'presenze' && (
-            <PresenzeTab corsoId={corsoId} classeId={classeId} studenti={studenti} />
+            <PresenzeTab corsoId={corsoId} classeId={classeId} studenti={studenti} initialDate={presenzeInitialDate} />
           )}
 
           {/* VOTI */}
@@ -974,12 +997,14 @@ export default function ClasseDetail() {
                 })}
               </div>
             )}
-            {lezioni.filter(l => new Date(l.data) >= now).length > 3 && (
-              <button className="btn btn-ghost btn-sm" style={{ marginTop: 12, width: '100%', color: 'var(--accent)' }}
-                onClick={() => setTab('lezioni')}>
-                Vedi tutto il registro →
-              </button>
-            )}
+            <button
+              className="btn btn-sm"
+              style={{ marginTop: 12, width: '100%', opacity: tab === 'lezioni' ? 0.4 : 1, cursor: tab === 'lezioni' ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)' }}
+              disabled={tab === 'lezioni'}
+              onClick={() => setTab('lezioni')}
+            >
+              <BookOpen size={14} /> Vedi tutte le lezioni
+            </button>
           </div>
 
           {/* Info corso / classe */}

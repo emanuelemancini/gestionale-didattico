@@ -1,29 +1,42 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { collection, getDocs, doc, getDoc, addDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, addDoc, deleteDoc, updateDoc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
-import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2 } from 'lucide-react';
+import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 import { courseColor } from '../../utils/colors';
 function corsoColor(id) { return courseColor(id); }
 
 export default function ClasseOverview() {
-  const { classeId } = useParams();
+  const { classeSlug } = useParams();
   const { user } = useAuth();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') || 'lezioni';
+  const setTab = (t) => setSearchParams(p => { const n = new URLSearchParams(p); n.set('tab', t); return n; });
 
+  const [classeId, setClasseId]     = useState(null);
   const [classe, setClasse]         = useState(null);
   const [studenti, setStudenti]     = useState([]);
   const [corsi, setCorsi]           = useState([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
+
+  // ── Lezioni ─────────────────────────────────────────────────────────────
+  const [lezioni, setLezioni]           = useState([]);
+  const [loadingLezioni, setLoadingLezioni] = useState(false);
+  const [filterCorso, setFilterCorso]   = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo]   = useState('');
   const [selected, setSelected]     = useState(null);
 
   const [showAddModal, setShowAddModal]       = useState(false);
@@ -47,12 +60,18 @@ export default function ClasseOverview() {
     if (!user) return;
     setLoading(true);
     try {
-      const [classeSnap, studentiSnap, corsiSnap] = await Promise.all([
-        getDoc(doc(db, 'users', user.uid, 'classi', classeId)),
-        getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'studenti')),
+      // Risolvi classeId dallo slug
+      const classiQ = query(collection(db, 'users', user.uid, 'classi'), where('slug', '==', classeSlug));
+      const classiSnap = await getDocs(classiQ);
+      if (classiSnap.empty) return;
+      const classeDoc = classiSnap.docs[0];
+      const resolvedClasseId = classeDoc.id;
+      setClasseId(resolvedClasseId);
+
+      const [studentiSnap, corsiSnap] = await Promise.all([
+        getDocs(collection(db, 'users', user.uid, 'classi', resolvedClasseId, 'studenti')),
         getDocs(collection(db, 'users', user.uid, 'corsi')),
       ]);
-      if (!classeSnap.exists()) return;
 
       const list = studentiSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
@@ -60,11 +79,11 @@ export default function ClasseOverview() {
 
       const corsiList = [];
       for (const corsoDoc of corsiSnap.docs) {
-        const jSnap = await getDoc(doc(db, 'users', user.uid, 'corsi', corsoDoc.id, 'classi', classeId));
+        const jSnap = await getDoc(doc(db, 'users', user.uid, 'corsi', corsoDoc.id, 'classi', resolvedClasseId));
         if (jSnap.exists()) corsiList.push({ id: corsoDoc.id, ...corsoDoc.data() });
       }
 
-      setClasse({ id: classeSnap.id, ...classeSnap.data() });
+      setClasse({ id: classeDoc.id, ...classeDoc.data() });
       setStudenti(list);
       setCorsi(corsiList);
     } catch (e) {
@@ -74,7 +93,20 @@ export default function ClasseOverview() {
     }
   };
 
-  useEffect(() => { loadData(); }, [classeId, user]);
+  useEffect(() => { loadData(); }, [classeSlug, user]);
+
+  useEffect(() => {
+    if (!user || !classeId) return;
+    setLoadingLezioni(true);
+    getDocs(query(collection(db, 'users', user.uid, 'lezioni'), where('classeId', '==', classeId)))
+      .then(snap => {
+        const list = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => b.data?.localeCompare(a.data) || b.oraInizio?.localeCompare(a.oraInizio));
+        setLezioni(list);
+      })
+      .finally(() => setLoadingLezioni(false));
+  }, [user, classeId]);
 
   // ── Studenti CRUD ────────────────────────────────────────────────────────
   const handleAddStudent = async () => {
@@ -207,6 +239,27 @@ export default function ClasseOverview() {
     );
   }, [studenti, search]);
 
+  const lezoniFiltrate = useMemo(() => {
+    return lezioni.filter(l => {
+      if (filterCorso && l.corsoId !== filterCorso) return false;
+      if (filterDateFrom && l.data < filterDateFrom) return false;
+      if (filterDateTo && l.data > filterDateTo) return false;
+      return true;
+    });
+  }, [lezioni, filterCorso, filterDateFrom, filterDateTo]);
+
+  // Raggruppa per mese
+  const lezioniPerMese = useMemo(() => {
+    const groups = {};
+    lezoniFiltrate.forEach(l => {
+      if (!l.data) return;
+      const key = format(parseISO(l.data), 'MMMM yyyy', { locale: it });
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(l);
+    });
+    return groups;
+  }, [lezoniFiltrate]);
+
   if (loading) return (
     <div className="page fade-in">
       {[...Array(5)].map((_, i) => <div key={i} className="skeleton" style={{ height: 44, borderRadius: 8, marginBottom: 8 }} />)}
@@ -221,8 +274,23 @@ export default function ClasseOverview() {
         title={classe.nome}
         subtitle={[classe.istituzione, classe.anno_accademico].filter(Boolean).join(' · ')}
       />
-      <div className="page fade-in" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      <div className="page fade-in">
 
+        {/* ── Tab bar ── */}
+        <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 20 }}>
+          {[{ id: 'lezioni', label: 'Lezioni' }, { id: 'studenti', label: 'Studenti' }].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '10px 20px', fontSize: 14, fontWeight: tab === t.id ? 600 : 400,
+              color: tab === t.id ? 'var(--accent)' : 'var(--text-2)',
+              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: '-2px', transition: 'color 0.15s',
+            }}>{t.label}</button>
+          ))}
+        </div>
+
+        {tab === 'studenti' && (
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
         {/* ── Colonna sinistra ── */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -236,7 +304,7 @@ export default function ClasseOverview() {
                 {corsi.map(c => {
                   const color = corsoColor(c.id);
                   return (
-                    <Link key={c.id} to={`/corsi/${c.id}/classi/${classeId}`} style={{ textDecoration: 'none' }}>
+                    <Link key={c.id} to={`/corsi/${c.slug || c.id}/classi/${classeSlug}`} style={{ textDecoration: 'none' }}>
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: 7,
                         padding: '6px 12px', borderRadius: 20,
@@ -409,6 +477,99 @@ export default function ClasseOverview() {
             </div>
           )}
         </div>
+        </div>
+        )} {/* fine tab studenti */}
+
+        {tab === 'lezioni' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Filtri */}
+            <div className="card" style={{ padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ marginBottom: 0, minWidth: 180 }}>
+                <label className="form-label" style={{ marginBottom: 4 }}>Corso</label>
+                <select className="form-input" style={{ margin: 0 }} value={filterCorso} onChange={e => setFilterCorso(e.target.value)}>
+                  <option value="">Tutti i corsi</option>
+                  {corsi.map(c => <option key={c.id} value={c.id}>{c.nomeCorso}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ marginBottom: 4 }}>Dal</label>
+                <input type="date" className="form-input" style={{ margin: 0 }} value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ marginBottom: 4 }}>Al</label>
+                <input type="date" className="form-input" style={{ margin: 0 }} value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
+              </div>
+              {(filterCorso || filterDateFrom || filterDateTo) && (
+                <button className="btn btn-ghost btn-sm" onClick={() => { setFilterCorso(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+                  style={{ marginBottom: 2 }}>Reset filtri</button>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text-3)', alignSelf: 'center' }}>
+                {lezoniFiltrate.length} {lezoniFiltrate.length === 1 ? 'lezione' : 'lezioni'}
+              </span>
+            </div>
+
+            {loadingLezioni ? (
+              <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>
+            ) : lezoniFiltrate.length === 0 ? (
+              <div className="empty-state">
+                <CalendarDays size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                <div className="empty-state-title">Nessuna lezione trovata</div>
+                <div className="empty-state-text">
+                  {lezioni.length === 0 ? 'Non hai ancora registrato lezioni per questa classe.' : 'Nessuna lezione corrisponde ai filtri selezionati.'}
+                </div>
+              </div>
+            ) : (
+              Object.entries(lezioniPerMese).map(([month, lezMese]) => (
+                <div key={month}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+                    {month}
+                  </div>
+                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    {lezMese.map((l, idx) => {
+                      const color = corsoColor(l.corsoId);
+                      const durataMins = l.durata || 0;
+                      const h = Math.floor(durataMins / 60);
+                      const m = durataMins % 60;
+                      const durataStr = h > 0
+                        ? (m > 0 ? `${h} ${h === 1 ? 'ora' : 'ore'} ${m}min` : `${h} ${h === 1 ? 'ora' : 'ore'}`)
+                        : m > 0 ? `${m}min` : '';
+                      return (
+                        <div key={l.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px',
+                          borderBottom: idx < lezMese.length - 1 ? '1px solid var(--border)' : 'none',
+                        }}>
+                          {/* Data */}
+                          <div style={{ width: 80, flexShrink: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>{format(parseISO(l.data), 'EEE dd', { locale: it })}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{l.oraInizio}–{l.oraFine}</div>
+                          </div>
+                          {/* Corso pill */}
+                          <div style={{ flexShrink: 0 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: `${color}15`, color, border: `1px solid ${color}30` }}>
+                              {l.nomeCorso}
+                            </span>
+                          </div>
+                          {/* Argomenti / note */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            {l.note && <div style={{ fontSize: 13, color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.note}</div>}
+                          </div>
+                          {/* Durata */}
+                          {durataStr && (
+                            <div style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Clock size={12} /> {durataStr}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )} {/* fine tab lezioni */}
+
       </div>
 
       {/* Modal modifica studente */}

@@ -97,11 +97,12 @@ export default function Header({ title, subtitle, actions }) {
       // Studenti da ogni classe
       const studentiAll = [];
       await Promise.all(classiSnap.docs.map(async cl => {
+        const clData = cl.data();
         const snap = await getDocs(collection(db, 'users', user.uid, 'classi', cl.id, 'studenti'));
         snap.docs.forEach(d => {
           const s = d.data();
           if ((s.nome + ' ' + s.cognome).toLowerCase().includes(lower)) {
-            studentiAll.push({ id: d.id, classeId: cl.id, ...s });
+            studentiAll.push({ id: d.id, classeId: cl.id, classeSlug: clData.slug || cl.id, ...s });
           }
         });
       }));
@@ -115,7 +116,8 @@ export default function Header({ title, subtitle, actions }) {
           pSnap.docs.forEach(d => {
             const p = d.data();
             if (p.titolo?.toLowerCase().includes(lower)) {
-              programmaAll.push({ id: d.id, corsoId: corso.id, classeId: jDoc.id, nomeCorso: corso.data().nomeCorso, ...p });
+              const corsoData = corso.data();
+              programmaAll.push({ id: d.id, corsoId: corso.id, corsoSlug: corsoData.slug || corso.id, classeId: jDoc.id, nomeCorso: corsoData.nomeCorso, ...p });
             }
           });
         }));
@@ -152,13 +154,12 @@ export default function Header({ title, subtitle, actions }) {
         {subtitle && <div className="header-subtitle">{subtitle}</div>}
       </div>
       <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {actions}
 
         {/* Barra di ricerca espandibile */}
         <div ref={wrapRef} style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative' }}>
           <div style={{
             overflow: 'hidden',
-            width: searchOpen ? 400 : 0,
+            width: searchOpen ? 260 : 0,
             transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)',
             display: 'flex', alignItems: 'center',
           }}>
@@ -209,7 +210,7 @@ export default function Header({ title, subtitle, actions }) {
               <>
                 <GroupLabel icon={<GraduationCap size={11} />} label="Classi" />
                 {r.classi.map(c => (
-                  <ResultItem key={c.id} to={`/classi/${c.id}`} onClose={closeSearch}>
+                  <ResultItem key={c.id} to={`/classi/${c.slug || c.id}`} onClose={closeSearch}>
                     <span style={{ fontWeight: 600 }}>{c.nome}</span>
                   </ResultItem>
                 ))}
@@ -219,7 +220,7 @@ export default function Header({ title, subtitle, actions }) {
               <>
                 <GroupLabel icon={<GraduationCap size={11} />} label="Studenti" />
                 {r.studenti.map(s => (
-                  <ResultItem key={s.id} to={`/classi/${s.classeId}`} onClose={closeSearch}>
+                  <ResultItem key={s.id} to={`/classi/${s.classeSlug || s.classeId}`} onClose={closeSearch}>
                     <span style={{ fontWeight: 600 }}>{s.nome} {s.cognome}</span>
                   </ResultItem>
                 ))}
@@ -229,7 +230,7 @@ export default function Header({ title, subtitle, actions }) {
               <>
                 <GroupLabel icon={<BookOpen size={11} />} label="Corsi" />
                 {r.corsi.map(c => (
-                  <ResultItem key={c.id} to={`/corsi/${c.id}`} onClose={closeSearch}>
+                  <ResultItem key={c.id} to={`/corsi/${c.slug || c.id}`} onClose={closeSearch}>
                     <span style={{ fontWeight: 600 }}>{c.nomeCorso}</span>
                   </ResultItem>
                 ))}
@@ -261,7 +262,7 @@ export default function Header({ title, subtitle, actions }) {
               <>
                 <GroupLabel icon={<FileText size={11} />} label="Programma" />
                 {r.programma.map(p => (
-                  <ResultItem key={p.id} to={`/corsi/${p.corsoId}`} onClose={closeSearch}>
+                  <ResultItem key={p.id} to={`/corsi/${p.corsoSlug || p.corsoId}`} onClose={closeSearch}>
                     <span style={{ fontWeight: 600 }}>{p.titolo}</span>
                     {p.nomeCorso && <span style={{ color: 'var(--text-3)', marginLeft: 6, fontSize: 11 }}>· {p.nomeCorso}</span>}
                   </ResultItem>

@@ -9,33 +9,46 @@ import { getVotoClass } from '../../utils/anni';
 import { User, Paperclip } from 'lucide-react';
 
 export default function StudenteDetail() {
-  const { corsoId, classeId, studenteId } = useParams();
+  const { corsoSlug, classeSlug, studenteId } = useParams();
   const { user } = useAuth();
 
+  const [corsoId, setCorsoId] = useState(null);
+  const [classeId, setClasseId] = useState(null);
   const [studente, setStudente] = useState(null);
   const [classe, setClasse] = useState(null);
   const [voti, setVoti] = useState([]);
   const [presenzeStats, setPresenzeStats] = useState({ presenti: 0, tot: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, [classeId, studenteId, user]);
+  useEffect(() => { loadData(); }, [corsoSlug, classeSlug, studenteId, user]);
 
   const loadData = async () => {
     if (!user) return;
     setLoading(true);
     try {
+      // Risolvi corsoId e classeId dagli slug
+      const [corsiSnap, classiSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users', user.uid, 'corsi'), where('slug', '==', corsoSlug))),
+        getDocs(query(collection(db, 'users', user.uid, 'classi'), where('slug', '==', classeSlug))),
+      ]);
+      if (corsiSnap.empty || classiSnap.empty) return;
+      const resolvedCorsoId = corsiSnap.docs[0].id;
+      const resolvedClasseId = classiSnap.docs[0].id;
+      setCorsoId(resolvedCorsoId);
+      setClasseId(resolvedClasseId);
+
       // 1. Classe info
-      const clDoc = await getDoc(doc(db, 'users', user.uid, 'classi', classeId));
+      const clDoc = classiSnap.docs[0];
       if (!clDoc.exists()) return;
 
       // 2. Studente info
-      const sDocRef = doc(db, 'users', user.uid, 'classi', classeId, 'studenti', studenteId);
+      const sDocRef = doc(db, 'users', user.uid, 'classi', resolvedClasseId, 'studenti', studenteId);
       const sDoc = await getDoc(sDocRef);
       if (!sDoc.exists()) return;
 
       // 3. Voti / Esercitazioni (dal percorso junction corsoId/classeId)
-      const esBasePath = corsoId
-        ? ['users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni']
+      const esBasePath = resolvedCorsoId
+        ? ['users', user.uid, 'corsi', resolvedCorsoId, 'classi', resolvedClasseId, 'esercitazioni']
         : null;
       const votiList = [];
       if (esBasePath) {
@@ -53,8 +66,8 @@ export default function StudenteDetail() {
       }
 
       // 4. Presenze (dal percorso junction)
-      const presBasePath = corsoId
-        ? ['users', user.uid, 'corsi', corsoId, 'classi', classeId, 'presenze']
+      const presBasePath = resolvedCorsoId
+        ? ['users', user.uid, 'corsi', resolvedCorsoId, 'classi', resolvedClasseId, 'presenze']
         : null;
       let pres = 0;
       const dates = new Set();
@@ -90,7 +103,7 @@ export default function StudenteDetail() {
       <Header
         title={`${studente.cognome} ${studente.nome}`}
         subtitle={`${classe?.nome || ''}`}
-        actions={<Link to={`/classi/${classeId}`} className="btn btn-secondary btn-sm">← Torna alla Classe</Link>}
+        actions={<Link to={`/classi/${classeSlug}`} className="btn btn-secondary btn-sm">← Torna alla Classe</Link>}
       />
       <div className="page fade-in">
 
