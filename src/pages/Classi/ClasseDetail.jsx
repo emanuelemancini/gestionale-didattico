@@ -161,18 +161,27 @@ export default function ClasseDetail() {
       return Object.keys(l.argomentiSelezionati);
     return l.argomentoId ? [l.argomentoId] : [];
   }))];
-  // Mappa topicId → Set di subId usati nelle lezioni passate
+  // Mappa topicId → { subId: [data1, data2, ...] } (tutte le date, ordinate)
+  // Per argomenti senza sottoargomenti, usa chiave speciale '_self'
   const subsDoneMap = {};
   lezioniPassate.forEach(l => {
+    const aggiungi = (argId, subId, data) => {
+      if (!subsDoneMap[argId]) subsDoneMap[argId] = {};
+      if (!subsDoneMap[argId][subId]) subsDoneMap[argId][subId] = [];
+      if (!subsDoneMap[argId][subId].includes(data)) subsDoneMap[argId][subId].push(data);
+    };
     if (l.argomentiSelezionati && Object.keys(l.argomentiSelezionati).length > 0) {
       Object.entries(l.argomentiSelezionati).forEach(([argId, subIds]) => {
-        if (!subsDoneMap[argId]) subsDoneMap[argId] = new Set();
-        subIds.forEach(sid => subsDoneMap[argId].add(sid));
+        if (subIds.length > 0) subIds.forEach(sid => aggiungi(argId, sid, l.data));
+        else aggiungi(argId, '_self', l.data);
       });
     } else if (l.argomentoId) {
-      if (!subsDoneMap[l.argomentoId]) subsDoneMap[l.argomentoId] = new Set();
-      if (l.sottoargomentoId) subsDoneMap[l.argomentoId].add(l.sottoargomentoId);
+      aggiungi(l.argomentoId, l.sottoargomentoId || '_self', l.data);
     }
+  });
+  // Ordina le date per ciascun sottoargomento
+  Object.values(subsDoneMap).forEach(subMap => {
+    Object.keys(subMap).forEach(k => subMap[k].sort());
   });
   const topicsAll    = programma;
   const topicsDone   = programma.filter(p => topicsDoneIds.includes(p.id));
@@ -556,9 +565,9 @@ export default function ClasseDetail() {
                       );
                       const expanded = expandedTopics[topic.id];
                       const subs = topic.sottoargomenti || [];
-                      const subsDone = subsDoneMap[topic.id] || new Set();
+                      const subsDone = subsDoneMap[topic.id] || {};
                       const trattatiCount = subs.length > 0
-                        ? subs.filter(s => subsDone.has(s.id)).length
+                        ? subs.filter(s => subsDone[s.id] !== undefined).length
                         : (topicsDoneIds.includes(topic.id) ? 1 : 0);
                       const trattatiTotal = subs.length > 0 ? subs.length : 1;
                       const tuttiTrattati = trattatiCount === trattatiTotal;
@@ -604,18 +613,29 @@ export default function ClasseDetail() {
                                 </div>
                                 {/* Riga 3: info badge — indentata per allinearsi con il testo */}
                                 <div style={{ marginTop: 10, paddingLeft: 65, display: 'flex', gap: 12, alignItems: 'center' }}>
-                                  {subs.length > 0 && (
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#0d9488', background: 'rgba(13,148,136,0.1)', borderRadius: 4, padding: '1px 7px' }}>
-                                      {subs.length} {subs.length === 1 ? 'sottoargomento' : 'sottoargomenti'}
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: '#0d9488', background: 'rgba(13,148,136,0.1)', borderRadius: 4, padding: '1px 7px' }}>
+                                    {subs.length} {subs.length === 1 ? 'sottoargomento' : 'sottoargomenti'}
+                                  </span>
+                                  {subs.length > 0 ? (
+                                    <span style={{
+                                      fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '1px 7px',
+                                      color: tuttiTrattati ? '#16a34a' : trattatiCount > 0 ? '#d97706' : '#ef4444',
+                                      background: tuttiTrattati ? 'rgba(22,163,74,0.1)' : trattatiCount > 0 ? 'rgba(217,119,6,0.1)' : 'rgba(239,68,68,0.1)',
+                                    }}>
+                                      {trattatiCount}/{trattatiTotal} trattati
+                                    </span>
+                                  ) : topicsDoneIds.includes(topic.id) ? (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 7px' }}>
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: '#16a34a' }}>
+                                        <Check size={9} strokeWidth={3} color="#fff" />
+                                      </span>
+                                      Trattato
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.1)', borderRadius: 4, padding: '1px 7px' }}>
+                                      Non trattato
                                     </span>
                                   )}
-                                  <span style={{
-                                    fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '1px 7px',
-                                    color: tuttiTrattati ? '#16a34a' : trattatiCount > 0 ? '#d97706' : '#ef4444',
-                                    background: tuttiTrattati ? 'rgba(22,163,74,0.1)' : trattatiCount > 0 ? 'rgba(217,119,6,0.1)' : 'rgba(239,68,68,0.1)',
-                                  }}>
-                                    {trattatiCount}/{trattatiTotal} trattati
-                                  </span>
                                   {lezioniTopic.length > 0 && (
                                     <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
                                       {lezioniTopic.length} {lezioniTopic.length === 1 ? 'lezione' : 'lezioni'}
@@ -638,7 +658,8 @@ export default function ClasseDetail() {
                               <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', padding: '10px 18px 14px 120px' }}>
                                 {subs.map((sub, si) => {
                                   const isLast = si === subs.length - 1;
-                                  const isDone = subsDone.has(sub.id);
+                                  const isDone = subsDone[sub.id] !== undefined;
+                                  const dateTrattato = isDone ? subsDone[sub.id].map(d => format(new Date(d + 'T12:00:00'), 'd MMM yyyy', { locale: it })) : [];
                                   return (
                                     <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
                                       <div style={{ position: 'absolute', left: -24, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: '#0d9488', opacity: 0.25 }} />
@@ -650,16 +671,24 @@ export default function ClasseDetail() {
                                         borderRadius: 6,
                                         width: 32, height: 32,
                                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                        flexShrink: 0, margin: '5px 0',
+                                        flexShrink: 0, margin: '9px 0',
                                         background: isDone ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.08)',
-                                        position: 'relative', overflow: 'hidden',
                                       }}>
-                                        <span style={{ opacity: isDone ? 0.35 : 1 }}>{i + 1}.{si + 1}</span>
-                                        {isDone && (
-                                          <Check size={14} strokeWidth={3} style={{ position: 'absolute', color: '#16a34a', opacity: 0.55 }} />
-                                        )}
+                                        {i + 1}.{si + 1}
                                       </span>
-                                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', flex: 1 }}>{sub.titolo}</span>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{sub.titolo}</span>
+                                        {isDone && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: '#16a34a', marginLeft: 6, verticalAlign: 'middle' }}>
+                                            <Check size={10} strokeWidth={3} color="#fff" />
+                                          </span>
+                                        )}
+                                        {isDone && (
+                                          <span style={{ display: 'block', fontSize: 11, color: '#16a34a', fontWeight: 500, marginTop: 1 }}>
+                                            {dateTrattato.join(' · ')}
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   );
                                 })}
