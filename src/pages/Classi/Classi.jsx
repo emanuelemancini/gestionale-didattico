@@ -199,13 +199,15 @@ export default function Classi() {
                   onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 18%, transparent)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 10%, transparent)'}
                 >
-                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--accent)', textTransform: 'uppercase' }}>
-                    {ist}
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{classiGruppo.length} {classiGruppo.length === 1 ? 'classe' : 'classi'}</span>
-                    <ChevronDown size={15} color="var(--text-3)" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--accent)', textTransform: 'uppercase' }}>
+                      {ist}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--accent)' }}>
+                      {classiGruppo.length} {classiGruppo.length === 1 ? 'classe' : 'classi'}
+                    </span>
                   </div>
+                  <ChevronDown size={15} color="var(--accent)" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                 </div>
                 {!isCollapsed && (
                 <div className="grid-3">
