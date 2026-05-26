@@ -9,7 +9,7 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Link } from 'react-router-dom';
 import { getAnniAccademici } from '../../utils/anni';
-import { GraduationCap, MoreVertical, Edit2, Trash2, Users, Building2, Search } from 'lucide-react';
+import { GraduationCap, MoreVertical, Edit2, Trash2, Users, Building2, Search, ChevronDown } from 'lucide-react';
 
 export default function Classi() {
   const { user } = useAuth();
@@ -119,6 +119,8 @@ export default function Classi() {
   };
 
   const istituzioni = [...new Set(classi.map(c => c.istituzione).filter(Boolean))];
+  const [collapsed, setCollapsed] = useState({});
+  const toggleGroup = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
 
   const filtered = classi.filter(cl => {
     return !search ||
@@ -181,11 +183,31 @@ export default function Classi() {
               if (!groups[key]) groups[key] = [];
               groups[key].push(cl);
             });
-            return Object.entries(groups).map(([ist, classiGruppo]) => (
-              <div key={ist} style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>
-                  {ist}
+            return Object.entries(groups).map(([ist, classiGruppo]) => {
+              const isCollapsed = !!collapsed[ist];
+              return (
+              <div key={ist} style={{ marginBottom: 24 }}>
+                {/* Barra intestazione gruppo */}
+                <div
+                  onClick={() => toggleGroup(ist)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 14px', borderRadius: 8, marginBottom: isCollapsed ? 0 : 14,
+                    background: 'var(--surface-el)', cursor: 'pointer',
+                    border: '1px solid var(--border)', transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'color-mix(in srgb, var(--border) 60%, var(--surface-el))'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-el)'}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-2)', textTransform: 'uppercase' }}>
+                    {ist}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{classiGruppo.length} {classiGruppo.length === 1 ? 'classe' : 'classi'}</span>
+                    <ChevronDown size={15} color="var(--text-3)" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                  </div>
                 </div>
+                {!isCollapsed && (
                 <div className="grid-3">
                   {classiGruppo.map(cl => {
                     const color = colorMap[cl.id];
@@ -245,8 +267,9 @@ export default function Classi() {
                     );
                   })}
                 </div>
+                )}
               </div>
-            ));
+            )});
           })()}
           </>
         )}
