@@ -59,12 +59,12 @@ function SortableSubItem({ id, children }) {
 }
 
 const TABS = [
-  { id: 'programma', label: 'Programma Didattico' },
-  { id: 'lezioni',   label: 'Registro Lezioni' },
-  { id: 'studenti',  label: 'Studenti' },
-  { id: 'presenze',  label: 'Presenze' },
-  { id: 'voti',      label: 'Voti' },
-  { id: 'esercitazioni', label: 'Esercitazioni' },
+  { id: 'lezioni',       label: 'Registro Lezioni' },
+  { id: 'presenze',      label: 'Presenze' },
+  { id: 'programma',     label: 'Programma Didattico' },
+  { id: 'esercitazioni', label: 'Elaborati' },
+  { id: 'voti',          label: 'Voti' },
+  { id: 'studenti',      label: 'Studenti' },
 ];
 
 export default function ClasseDetail() {
@@ -78,7 +78,7 @@ export default function ClasseDetail() {
   const [studenti, setStudenti] = useState([]);
   const [lezioni, setLezioni] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(() => sessionStorage.getItem(`classe_tab_${classeId}`) || 'programma');
+  const [tab, setTab] = useState(() => sessionStorage.getItem(`classe_tab_${classeId}`) || 'lezioni');
   useEffect(() => { sessionStorage.setItem(`classe_tab_${classeId}`, tab); }, [tab, classeId]);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -96,6 +96,7 @@ export default function ClasseDetail() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [editLesson, setEditLesson] = useState(null);
+  const [expandedMonths, setExpandedMonths] = useState({});
   const [programma, setProgramma] = useState([]);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [editTopic, setEditTopic] = useState(null);
@@ -735,62 +736,95 @@ export default function ClasseDetail() {
                   <div className="empty-state-title">Nessuna lezione</div>
                   <div className="empty-state-text">Aggiungi la prima lezione del corso.</div>
                 </div>
-              ) : lezioni.map(lez => {
-                const past = new Date(lez.data) < now;
-                const d = new Date(lez.data);
-                const meseLbl = format(d, 'MMM', { locale: it }).toUpperCase();
-                const giornoNum = format(d, 'dd');
-                // Righe titolo: una per argomento
-                const titoloRighe = (() => {
-                  if (lez.argomentiSelezionati && Object.keys(lez.argomentiSelezionati).length > 0) {
-                    const righe = Object.entries(lez.argomentiSelezionati).map(([argId, subIds]) => {
-                      const arg = programma.find(p => p.id === argId);
-                      if (!arg) return null;
-                      if (!subIds.length) return arg.titolo;
-                      const subLabels = subIds.map(sid => (arg.sottoargomenti || []).find(s => s.id === sid)?.titolo).filter(Boolean);
-                      return subLabels.length > 0 ? `${arg.titolo} · ${subLabels.join(', ')}` : arg.titolo;
-                    }).filter(Boolean);
-                    return righe.length > 0 ? righe : [lez.note || 'Lezione'];
-                  }
-                  // Vecchio formato (retrocompatibilità)
-                  const argomento = lez.argomentoId ? programma.find(p => p.id === lez.argomentoId) : null;
-                  const sottoargomento = lez.sottoargomentoId && argomento ? (argomento.sottoargomenti || []).find(s => s.id === lez.sottoargomentoId) : null;
-                  const str = sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
-                  return [str];
-                })();
-                const durataOre = lez.durata ? (() => {
-                  const h = Math.floor(lez.durata / 60);
-                  const m = lez.durata % 60;
-                  if (m === 0) return `${h}h`;
-                  return `${h}h ${m}min`;
-                })() : null;
-                return (
-                  <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
-                    <div style={{
-                      flexShrink: 0, width: 52, textAlign: 'center',
-                      background: past ? 'var(--accent)12' : 'var(--surface-el)',
-                      border: `1px solid ${past ? 'var(--accent)30' : 'var(--border)'}`,
-                      borderRadius: 10, padding: '6px 0',
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: past ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.05em' }}>{meseLbl}</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
+              ) : (() => {
+                // Raggruppa per mese
+                const grouped = {};
+                lezioni.forEach(lez => {
+                  const key = lez.data.substring(0, 7); // 'yyyy-MM'
+                  if (!grouped[key]) grouped[key] = [];
+                  grouped[key].push(lez);
+                });
+                const sortedKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a)); // mesi più recenti prima
+                return sortedKeys.map(monthKey => {
+                  const isOpen = expandedMonths[monthKey] !== false; // default espanso
+                  const meseLezList = grouped[monthKey];
+                  const [yyyy, mm] = monthKey.split('-');
+                  const meseLabelFull = format(new Date(parseInt(yyyy), parseInt(mm) - 1, 1), 'MMMM yyyy', { locale: it });
+                  const meseLabel = meseLabelFull.charAt(0).toUpperCase() + meseLabelFull.slice(1);
+                  return (
+                    <div key={monthKey}>
+                      {/* Header mese */}
+                      <button
+                        onClick={() => setExpandedMonths(prev => ({ ...prev, [monthKey]: !isOpen }))}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', marginBottom: isOpen ? 8 : 4 }}
+                      >
+                        {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{meseLabel}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 4 }}>{meseLezList.length} {meseLezList.length === 1 ? 'lezione' : 'lezioni'}</span>
+                      </button>
+                      {/* Card lezioni del mese */}
+                      {isOpen && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                          {meseLezList.map(lez => {
+                            const past = new Date(lez.data) < now;
+                            const d = new Date(lez.data);
+                            const giornoNum = format(d, 'dd');
+                            const giornoSett = format(d, 'EEE', { locale: it }).toUpperCase();
+                            const titoloRighe = (() => {
+                              if (lez.argomentiSelezionati && Object.keys(lez.argomentiSelezionati).length > 0) {
+                                const righe = Object.entries(lez.argomentiSelezionati).map(([argId, subIds]) => {
+                                  const arg = programma.find(p => p.id === argId);
+                                  if (!arg) return null;
+                                  if (!subIds.length) return arg.titolo;
+                                  const subLabels = subIds.map(sid => (arg.sottoargomenti || []).find(s => s.id === sid)?.titolo).filter(Boolean);
+                                  return subLabels.length > 0 ? `${arg.titolo} · ${subLabels.join(', ')}` : arg.titolo;
+                                }).filter(Boolean);
+                                return righe.length > 0 ? righe : [lez.note || 'Lezione'];
+                              }
+                              const argomento = lez.argomentoId ? programma.find(p => p.id === lez.argomentoId) : null;
+                              const sottoargomento = lez.sottoargomentoId && argomento ? (argomento.sottoargomenti || []).find(s => s.id === lez.sottoargomentoId) : null;
+                              const str = sottoargomento ? `${argomento.titolo} · ${sottoargomento.titolo}` : (argomento?.titolo || lez.note || 'Lezione');
+                              return [str];
+                            })();
+                            const durataOre = lez.durata ? (() => {
+                              const h = Math.floor(lez.durata / 60);
+                              const m = lez.durata % 60;
+                              if (m === 0) return `${h}h`;
+                              return `${h}h ${m}min`;
+                            })() : null;
+                            return (
+                              <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
+                                <div style={{
+                                  flexShrink: 0, width: 52, textAlign: 'center',
+                                  background: past ? 'var(--accent)12' : 'var(--surface-el)',
+                                  border: `1px solid ${past ? 'var(--accent)30' : 'var(--border)'}`,
+                                  borderRadius: 10, padding: '6px 0',
+                                }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: past ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.05em' }}>{giornoSett}</div>
+                                  <div style={{ fontSize: 22, fontWeight: 800, color: past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                                    {titoloRighe.map((riga, i) => (
+                                      <div key={i} style={{ lineHeight: 1.4 }}>{riga}</div>
+                                    ))}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', gap: 12 }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={12} /> {lez.oraInizio}–{lez.oraFine}</span>
+                                    {durataOre && <span>{durataOre}</span>}
+                                  </div>
+                                </div>
+                                <span className={`badge ${past ? 'badge-success' : 'badge-blue'}`}>{past ? 'Svolta' : 'In programma'}</span>
+                                <button className="btn btn-ghost btn-sm" title="Modifica" onClick={() => { setEditLesson(lez); setShowLessonModal(true); }}><Edit2 size={15} /></button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                        {titoloRighe.map((riga, i) => (
-                          <div key={i} style={{ lineHeight: 1.4 }}>{riga}</div>
-                        ))}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', gap: 12 }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={12} /> {lez.oraInizio}–{lez.oraFine}</span>
-                        {durataOre && <span>{durataOre}</span>}
-                      </div>
-                    </div>
-                    <span className={`badge ${past ? 'badge-success' : 'badge-blue'}`}>{past ? 'Svolta' : 'In programma'}</span>
-                    <button className="btn btn-ghost btn-sm" title="Modifica" onClick={() => { setEditLesson(lez); setShowLessonModal(true); }}><Edit2 size={15} /></button>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           )}
 

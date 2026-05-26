@@ -7,7 +7,7 @@ import Modal from '../../../components/ui/Modal';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { FileSignature, CalendarDays, Edit2, Trash2, ClipboardList, ChevronUp, X, Check, Clock, Circle } from 'lucide-react';
+import { FileSignature, CalendarDays, Edit2, Trash2, ClipboardList, ChevronUp, ChevronDown, ChevronRight, X, Check, Clock, Circle } from 'lucide-react';
 
 const TIPI_PROVA = [
   { value: 'midtest',    label: 'Midtest' },
@@ -64,9 +64,24 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   const [provaForm, setProvaForm] = useState({ titolo: '', tipo: 'midtest', modalita: 'scritto', data: '' });
   const [savingProva, setSavingProva] = useState(false);
 
+  // espansione sezioni
+  const [expandedEserc, setExpandedEserc] = useState(true);
+  const [expandedConsegne, setExpandedConsegne] = useState(true);
+  const [expandedProve, setExpandedProve] = useState(true);
+
+  // consegne items (nuova sezione)
+  const [consegneItems, setConsegneItems] = useState([]);
+  const [consegneItemStats, setConsegneItemStats] = useState({});
+  const [showConsegnaItemModal, setShowConsegnaItemModal] = useState(false);
+  const [editConsegnaItem, setEditConsegnaItem] = useState(null);
+  const [deleteConsegnaItemTarget, setDeleteConsegnaItemTarget] = useState(null);
+  const [consegnaItemForm, setConsegnaItemForm] = useState({ titolo: '', descrizione: '', data_scadenza: '' });
+  const [savingConsegnaItem, setSavingConsegnaItem] = useState(false);
+
   // pannello voti inline
   const [selectedEsId, setSelectedEsId] = useState(null);
   const [selectedProvaId, setSelectedProvaId] = useState(null);
+  const [selectedConsegnaId, setSelectedConsegnaId] = useState(null);
   const [studenti, setStudenti] = useState([]);
   const [consegne, setConsegne] = useState({});
   const [provaVoti, setProvaVoti] = useState({});   // { studenteId: voto }
@@ -75,6 +90,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   const panelRef = useRef(null);
   const cardRefs = useRef({});
   const provaCardRefs = useRef({});
+  const consegnaItemCardRefs = useRef({});
 
   // editing cella voto
   const [editingCell, setEditingCell] = useState(null); // studenteId
@@ -116,6 +132,13 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
     }
   }, [selectedProvaId]);
 
+  useEffect(() => {
+    if (selectedConsegnaId) {
+      const el = consegnaItemCardRefs.current[selectedConsegnaId];
+      if (el) { setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80); }
+    }
+  }, [selectedConsegnaId]);
+
   useEffect(() => { loadData(); }, [corsoId, classeId, user]);
 
   const loadData = async () => {
@@ -145,13 +168,65 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
       const pSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'prove'));
       setProve(pSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.data || '').localeCompare(b.data || '')));
+
+      // carica consegne items
+      const ciSnap = await getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne'));
+      const ciList = ciSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => {
+          const da = a.data_scadenza ? new Date(a.data_scadenza) : new Date(0);
+          const db2 = b.data_scadenza ? new Date(b.data_scadenza) : new Date(0);
+          return da - db2;
+        });
+      setConsegneItems(ciList);
+      const ciStats = {};
+      await Promise.all(ciList.map(async ci => {
+        const cSnap = await getDocs(
+          collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne', ci.id, 'consegne')
+        );
+        const inRitardo  = cSnap.docs.filter(d => d.data().consegnaStato === 'ritardo').length;
+        const consegnati = cSnap.docs.filter(d => d.data().consegnaStato === 'consegnato').length + inRitardo;
+        const conVoto    = cSnap.docs.filter(d => d.data().voto !== null && d.data().voto !== undefined).length;
+        ciStats[ci.id] = { total: studentiCount, consegnati, inRitardo, conVoto };
+      }));
+      setConsegneItemStats(ciStats);
     } finally { setLoading(false); }
+  };
+
+  // Helper path per il pannello attivo
+  const getActivePanelPath = (studenteId) => {
+    if (selectedEsId)      return doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', selectedEsId, 'consegne', studenteId);
+    if (selectedConsegnaId) return doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne', selectedConsegnaId, 'consegne', studenteId);
+    return null;
+  };
+
+  const openConsegnaItemPanel = async (consegnaId) => {
+    if (selectedConsegnaId === consegnaId) { setSelectedConsegnaId(null); setEditingCell(null); return; }
+    setSelectedConsegnaId(consegnaId);
+    setSelectedEsId(null);
+    setSelectedProvaId(null);
+    setEditingCell(null);
+    setLoadingPanel(true);
+    try {
+      const [studSnap, consSnap] = await Promise.all([
+        getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'studenti')),
+        getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne', consegnaId, 'consegne')),
+      ]);
+      const studList = studSnap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.cognome || '').localeCompare(b.cognome || '') || (a.nome || '').localeCompare(b.nome || ''));
+      const cMap = {};
+      consSnap.docs.forEach(d => { cMap[d.id] = d.data(); });
+      setStudenti(studList);
+      setConsegne(cMap);
+    } catch { toast('Errore nel caricamento', 'error'); }
+    finally { setLoadingPanel(false); }
   };
 
   const openPanel = async (esId) => {
     if (selectedEsId === esId) { setSelectedEsId(null); setEditingCell(null); return; }
     setSelectedEsId(esId);
     setSelectedProvaId(null);
+    setSelectedConsegnaId(null);
     setEditingCell(null);
     setLoadingPanel(true);
     try {
@@ -175,6 +250,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
     if (selectedProvaId === provaId) { setSelectedProvaId(null); setEditingCell(null); return; }
     setSelectedProvaId(provaId);
     setSelectedEsId(null);
+    setSelectedConsegnaId(null);
     setEditingCell(null);
     setLoadingPanel(true);
     try {
@@ -215,7 +291,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
       const prev = consegne[studenteId] || {};
       const newLode = val !== 30 ? false : (prev.lode || false);
       await setDoc(
-        doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', selectedEsId, 'consegne', studenteId),
+        getActivePanelPath(studenteId),
         { voto: val, lode: newLode, consegnato: prev.consegnato || false, updatedAt: serverTimestamp() },
         { merge: true }
       );
@@ -245,11 +321,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   const toggleLode = async (studenteId) => {
     const c = consegne[studenteId] || {};
     const newLode = !c.lode;
-    await setDoc(
-      doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', selectedEsId, 'consegne', studenteId),
-      { lode: newLode, updatedAt: serverTimestamp() },
-      { merge: true }
-    );
+    await setDoc(getActivePanelPath(studenteId), { lode: newLode, updatedAt: serverTimestamp() }, { merge: true });
     setConsegne(prev => ({ ...prev, [studenteId]: { ...(prev[studenteId] || {}), lode: newLode } }));
   };
 
@@ -257,18 +329,16 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
     const c = consegne[studenteId] || {};
     const idx = CONSEGNA_STATI.indexOf(c.consegnaStato ?? null);
     const newVal = CONSEGNA_STATI[(idx + 1) % CONSEGNA_STATI.length];
-    await setDoc(
-      doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'esercitazioni', selectedEsId, 'consegne', studenteId),
-      { consegnaStato: newVal, updatedAt: serverTimestamp() },
-      { merge: true }
-    );
+    await setDoc(getActivePanelPath(studenteId), { consegnaStato: newVal, updatedAt: serverTimestamp() }, { merge: true });
     setConsegne(prev => ({ ...prev, [studenteId]: { ...(prev[studenteId] || {}), consegnaStato: newVal } }));
     refreshStats(studenteId, { consegnaStato: newVal });
   };
 
   function refreshStats(studenteId, patch) {
-    setConsegneStats(prev => {
-      const old = prev[selectedEsId] || { total: studentiCount, consegnati: 0, conVoto: 0 };
+    const activeId = selectedEsId || selectedConsegnaId;
+    const setter = selectedEsId ? setConsegneStats : setConsegneItemStats;
+    setter(prev => {
+      const old = prev[activeId] || { total: studentiCount, consegnati: 0, conVoto: 0 };
       const merged = { ...consegne[studenteId], ...patch };
       const inRitardo = studenti.filter(s => {
         const c = s.id === studenteId ? merged : consegne[s.id];
@@ -282,7 +352,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
         const c = s.id === studenteId ? merged : consegne[s.id];
         return c?.voto !== null && c?.voto !== undefined;
       }).length;
-      return { ...prev, [selectedEsId]: { ...old, consegnati, inRitardo, conVoto } };
+      return { ...prev, [activeId]: { ...old, consegnati, inRitardo, conVoto } };
     });
   }
 
@@ -365,6 +435,33 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
     } catch { toast('Errore', 'error'); }
   };
 
+  // ── CRUD consegne items ──────────────────────────────────────────
+  const openCreateConsegnaItem = () => { setEditConsegnaItem(null); setConsegnaItemForm({ titolo: '', descrizione: '', data_scadenza: '' }); setShowConsegnaItemModal(true); };
+  const openEditConsegnaItem = (ci) => { setEditConsegnaItem(ci); setConsegnaItemForm({ titolo: ci.titolo, descrizione: ci.descrizione || '', data_scadenza: ci.data_scadenza || '' }); setShowConsegnaItemModal(true); };
+  const handleSaveConsegnaItem = async () => {
+    if (!consegnaItemForm.titolo.trim()) { toast('Il titolo è obbligatorio', 'error'); return; }
+    setSavingConsegnaItem(true);
+    try {
+      const col = collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne');
+      if (editConsegnaItem) {
+        await updateDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne', editConsegnaItem.id), consegnaItemForm);
+        toast('Consegna aggiornata', 'success');
+      } else {
+        await addDoc(col, { ...consegnaItemForm, createdAt: serverTimestamp() });
+        toast('Consegna creata!', 'success');
+      }
+      setShowConsegnaItemModal(false); loadData();
+    } catch { toast('Errore', 'error'); } finally { setSavingConsegnaItem(false); }
+  };
+  const handleDeleteConsegnaItem = async () => {
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'consegne', deleteConsegnaItemTarget.id));
+      if (selectedConsegnaId === deleteConsegnaItemTarget.id) setSelectedConsegnaId(null);
+      toast('Eliminata', 'success');
+      setDeleteConsegnaItemTarget(null); loadData();
+    } catch { toast('Errore', 'error'); }
+  };
+
   const selectedEs = esercitazioni.find(e => e.id === selectedEsId);
 
   return (
@@ -380,12 +477,13 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
 
           {/* ── Colonna Esercitazioni ── */}
           <div>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedEserc(v => !v)}>
+              <span style={{ color: 'var(--text-3)', display: 'flex', marginRight: 8 }}>{expandedEserc ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
               <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Esercitazioni</span>
               <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{esercitazioni.length}</span>
-              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={openCreate}>+ Nuova Esercitazione</button>
+              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); openCreate(); }}>+ Nuova Esercitazione</button>
             </div>
-            {esercitazioni.length === 0 ? (
+            {!expandedEserc ? null : esercitazioni.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
                 <div className="empty-state-title">Nessuna esercitazione</div>
                 <div className="empty-state-text">Crea la prima esercitazione.</div>
@@ -553,16 +651,175 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
             })}
           </div>
             )}
+          {/* ── Consegne (sotto esercitazioni) ── */}
+          <div style={{ marginTop: 24 }}>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedConsegne(v => !v)}>
+              <span style={{ color: 'var(--text-3)', display: 'flex', marginRight: 8 }}>{expandedConsegne ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Consegne</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{consegneItems.length}</span>
+              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); openCreateConsegnaItem(); }}>+ Nuova Consegna</button>
+            </div>
+            {!expandedConsegne ? null : consegneItems.length === 0 ? (
+              <div className="empty-state" style={{ padding: 32 }}>
+                <div className="empty-state-title">Nessuna consegna</div>
+                <div className="empty-state-text">Crea la prima consegna.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {consegneItems.map(ci => {
+                  const scadenzaObj = (() => {
+                    if (!ci.data_scadenza) return null;
+                    if (typeof ci.data_scadenza === 'object' && ci.data_scadenza.toDate) return ci.data_scadenza.toDate();
+                    const d = new Date(typeof ci.data_scadenza === 'string' && !ci.data_scadenza.includes('T') ? ci.data_scadenza + 'T12:00:00' : ci.data_scadenza);
+                    return isNaN(d) ? null : d;
+                  })();
+                  const scaduta = scadenzaObj ? scadenzaObj < new Date(new Date().setHours(0,0,0,0)) : false;
+                  const stats = consegneItemStats[ci.id] || { total: 0, consegnati: 0, conVoto: 0 };
+                  const progConsegne = stats.total > 0 ? Math.round((stats.consegnati / stats.total) * 100) : 0;
+                  const isSelected = ci.id === selectedConsegnaId;
+                  return (
+                    <div key={ci.id} ref={el => consegnaItemCardRefs.current[ci.id] = el}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{ci.titolo}</h3>
+                            {scadenzaObj ? (
+                              <div style={{ fontSize: 12, color: scaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <CalendarDays size={13} />
+                                Scadenza: {format(scadenzaObj, 'dd MMM yyyy', { locale: it })}
+                                {scaduta && <span className="badge badge-danger">Scaduta</span>}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <CalendarDays size={13} /> Nessuna scadenza
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                            <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => openEditConsegnaItem(ci)}><Edit2 size={15} /></button>
+                            <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteConsegnaItemTarget(ci)}><Trash2 size={15} /></button>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {ci.descrizione || 'Nessuna descrizione.'}
+                        </p>
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+                            <span style={{ color: 'var(--text-2)' }}>Consegnato</span>
+                            <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
+                          </div>
+                          <div style={{ background: 'var(--surface-el)', borderRadius: 20, height: 6, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', background: progConsegne === 100 ? 'var(--success)' : 'var(--accent)', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => openConsegnaItemPanel(ci.id)}
+                          className={isSelected ? 'btn btn-secondary' : 'btn btn-primary'}
+                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center' }}
+                        >
+                          {isSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
+                        </button>
+                      </div>
+
+                      {/* Pannello inline consegna */}
+                      {isSelected && (
+                        <div style={{ border: '1px solid var(--accent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{ci.titolo}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                                {Object.values(consegne).filter(c => c.consegnaStato === 'consegnato').length} consegnati · {Object.values(consegne).filter(c => c.consegnaStato === 'ritardo').length} in ritardo · {Object.values(consegne).filter(c => c.voto !== null && c.voto !== undefined).length} voti inseriti
+                              </div>
+                            </div>
+                            <button onClick={() => { setSelectedConsegnaId(null); setEditingCell(null); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4, borderRadius: 6 }}
+                              onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+                              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
+                            >
+                              <X size={15} />
+                            </button>
+                          </div>
+                          {loadingPanel ? (
+                            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {[...Array(3)].map((_, i) => <div key={i} className="skeleton" style={{ height: 40, borderRadius: 8 }} />)}
+                            </div>
+                          ) : studenti.length === 0 ? (
+                            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>Nessuno studente.</div>
+                          ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                              <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-el)' }}>
+                                  <th style={{ textAlign: 'left', padding: '7px 14px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)' }}>Studente</th>
+                                  <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 100 }}>Consegna</th>
+                                  <th style={{ textAlign: 'center', padding: '7px 20px', fontWeight: 600, fontSize: 11, color: 'var(--text-2)', width: 110 }}>Voto</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {studenti.map((s, idx) => {
+                                  const c = consegne[s.id] || {};
+                                  const isEditing = editingCell === s.id;
+                                  const haVoto = c.voto !== null && c.voto !== undefined;
+                                  return (
+                                    <tr key={s.id} style={{ borderBottom: idx < studenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--surface-el) 40%, transparent)' }}>
+                                      <td style={{ padding: '8px 14px', fontWeight: 500 }}>{s.cognome} {s.nome}</td>
+                                      <td style={{ textAlign: 'center', padding: '8px 10px' }}>
+                                        {(() => {
+                                          const stato = c.consegnaStato ?? null;
+                                          const cfg = CONSEGNA_CONFIG[stato];
+                                          return (
+                                            <button onClick={() => toggleConsegnato(s.id)}
+                                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1px solid ${cfg.border}`, background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap', width: 130 }}
+                                            >
+                                              {cfg.icon} {cfg.label}
+                                            </button>
+                                          );
+                                        })()}
+                                      </td>
+                                      <td style={{ textAlign: 'center', padding: '6px 10px', cursor: 'pointer' }} onClick={() => !isEditing && startEditCell(s.id)}>
+                                        {isEditing ? (
+                                          <input ref={cellInputRef} type="number" min={0} max={30} value={cellValue}
+                                            onChange={e => setCellValue(e.target.value)} onKeyDown={handleCellKey}
+                                            style={{ width: 52, textAlign: 'center', fontSize: 14, fontWeight: 700, border: '2px solid var(--accent)', borderRadius: 6, padding: '2px 4px', background: 'var(--surface)', color: 'var(--text)', outline: 'none' }}
+                                          />
+                                        ) : (
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                                            <span style={{ display: 'inline-block', minWidth: 34, padding: '2px 6px', borderRadius: 6, fontSize: 13, fontWeight: 700, color: haVoto ? votoColor(c.voto) : 'var(--text-3)', background: haVoto ? votoBg(c.voto) : 'transparent' }}>
+                                              {haVoto ? c.voto : '—'}
+                                            </span>
+                                            {c.voto === 30 && (
+                                              <label onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 'calc(50% + 22px)', display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }} title="Lode">
+                                                <input type="checkbox" checked={!!c.lode} onChange={() => toggleLode(s.id)} style={{ width: 12, height: 12, accentColor: '#16a34a', cursor: 'pointer' }} />
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: c.lode ? '#16a34a' : 'var(--text-3)' }}>L</span>
+                                              </label>
+                                            )}
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           </div>
 
           {/* ── Colonna Prove ── */}
           <div>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none' }} onClick={() => setExpandedProve(v => !v)}>
+              <span style={{ color: 'var(--text-3)', display: 'flex', marginRight: 8 }}>{expandedProve ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
               <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Prove</span>
               <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{prove.length}</span>
-              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setEditProva(null); setProvaForm({ titolo: '', tipo: 'midtest', modalita: 'scritto', data: new Date().toISOString().slice(0,10) }); setShowProvaModal(true); }}>+ Nuova Prova</button>
+              <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); setEditProva(null); setProvaForm({ titolo: '', tipo: 'midtest', modalita: 'scritto', data: new Date().toISOString().slice(0,10) }); setShowProvaModal(true); }}>+ Nuova Prova</button>
             </div>
-            {prove.length === 0 ? (
+            {!expandedProve ? null : prove.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
                 <div className="empty-state-title">Nessuna prova</div>
                 <div className="empty-state-text">Aggiungi midtest, verifiche o prove orali.</div>
@@ -789,6 +1046,36 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
             message={`Eliminare "${deleteProvaTarget.titolo}" e tutti i voti associati?`}
             onConfirm={handleDeleteProva}
             onCancel={() => setDeleteProvaTarget(null)}
+          />
+        )}
+
+        {showConsegnaItemModal && (
+          <Modal title={editConsegnaItem ? 'Modifica Consegna' : 'Nuova Consegna'} onClose={() => setShowConsegnaItemModal(false)}
+            footer={<>
+              <button className="btn btn-secondary" onClick={() => setShowConsegnaItemModal(false)}>Annulla</button>
+              <button className="btn btn-primary" onClick={handleSaveConsegnaItem} disabled={savingConsegnaItem}>{savingConsegnaItem ? '...' : editConsegnaItem ? 'Aggiorna' : 'Crea'}</button>
+            </>}>
+            <div className="form-group">
+              <label className="form-label">Titolo *</label>
+              <input className="form-input" placeholder="es. Relazione finale" value={consegnaItemForm.titolo} onChange={e => setConsegnaItemForm(f => ({ ...f, titolo: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Scadenza (Opzionale)</label>
+              <input type="date" className="form-input" value={consegnaItemForm.data_scadenza} onChange={e => setConsegnaItemForm(f => ({ ...f, data_scadenza: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Descrizione / Note</label>
+              <textarea className="form-input" placeholder="Dettagli sulla consegna..." value={consegnaItemForm.descrizione} onChange={e => setConsegnaItemForm(f => ({ ...f, descrizione: e.target.value }))} />
+            </div>
+          </Modal>
+        )}
+
+        {deleteConsegnaItemTarget && (
+          <ConfirmDialog
+            title="Elimina Consegna"
+            message={`Eliminare "${deleteConsegnaItemTarget.titolo}"? Tutti i voti e le consegne verranno rimossi.`}
+            onConfirm={handleDeleteConsegnaItem}
+            onCancel={() => setDeleteConsegnaItemTarget(null)}
           />
         )}
       </>}
