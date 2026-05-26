@@ -156,7 +156,11 @@ export default function ClasseDetail() {
   const lezioniPassate = lezioni.filter(l => new Date(l.data) < now);
   const oreSvolte   = Math.round(lezioniPassate.reduce((s, l) => s + (l.durata || 0), 0) / 60);
   const orePreviste = Math.round(lezioni.reduce((s, l) => s + (l.durata || 0), 0) / 60);
-  const topicsDoneIds = [...new Set(lezioniPassate.map(l => l.argomentoId).filter(Boolean))];
+  const topicsDoneIds = [...new Set(lezioniPassate.flatMap(l => {
+    if (l.argomentiSelezionati && Object.keys(l.argomentiSelezionati).length > 0)
+      return Object.keys(l.argomentiSelezionati);
+    return l.argomentoId ? [l.argomentoId] : [];
+  }))];
   const topicsAll    = programma;
   const topicsDone   = programma.filter(p => topicsDoneIds.includes(p.id));
   const pct = orePreviste > 0 ? Math.round((oreSvolte / orePreviste) * 100) : 0;
