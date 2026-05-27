@@ -9,7 +9,7 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
-import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList, FileText, CheckSquare, ExternalLink } from 'lucide-react';
+import { Search, BookOpen, ChevronRight, ChevronDown, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList, FileText, CheckSquare, ExternalLink, Check } from 'lucide-react';
 import LessonModal from '../../components/ui/LessonModal';
 import EsercitazioniTab from './tabs/EsercitazioniTab';
 import { format, parseISO } from 'date-fns';
@@ -18,30 +18,153 @@ import { it } from 'date-fns/locale';
 import { courseColor } from '../../utils/colors';
 function corsoColor(id) { return courseColor(id); }
 
-function ProgrammaList({ topics }) {
+function ProgrammaList({ topics, lezioniCorso = [] }) {
+  const [expanded, setExpanded] = useState({});
+
+  // Calcola argomenti trattati (stessa logica di ClasseDetail)
+  const now = new Date();
+  const lezioniPassate = lezioniCorso.filter(l => new Date(l.data + 'T23:59:00') <= now);
+
+  const topicsDoneIds = [...new Set(lezioniPassate.flatMap(l => {
+    if (l.argomentiSelezionati) return Object.keys(l.argomentiSelezionati);
+    return l.argomentoId ? [l.argomentoId] : [];
+  }))];
+
+  const subsDoneMap = {}; // { [topicId]: { [subId]: [date,...] } }
+  lezioniPassate.forEach(l => {
+    const aggiungi = (argId, subId, data) => {
+      if (!subsDoneMap[argId]) subsDoneMap[argId] = {};
+      if (!subsDoneMap[argId][subId]) subsDoneMap[argId][subId] = [];
+      subsDoneMap[argId][subId].push(data);
+    };
+    if (l.argomentiSelezionati) {
+      Object.entries(l.argomentiSelezionati).forEach(([argId, subIds]) => {
+        if (!subIds.length) aggiungi(argId, '_self', l.data);
+        else subIds.forEach(sid => aggiungi(argId, sid, l.data));
+      });
+    } else if (l.argomentoId) {
+      aggiungi(l.argomentoId, l.sottoargomentoId || '_self', l.data);
+    }
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {topics.map((topic, i) => {
         const subs = topic.sottoargomenti || [];
+        const subsDone = subsDoneMap[topic.id] || {};
+        const trattatiCount = subs.length > 0
+          ? subs.filter(s => subsDone[s.id] !== undefined).length
+          : (topicsDoneIds.includes(topic.id) ? 1 : 0);
+        const trattatiTotal = subs.length > 0 ? subs.length : 1;
+        const tuttiTrattati = trattatiCount === trattatiTotal;
+        const lezioniTopic = lezioniCorso.filter(l =>
+          l.argomentoId === topic.id ||
+          (l.argomentiSelezionati && l.argomentiSelezionati[topic.id] !== undefined)
+        );
+        const isExpanded = !!expanded[topic.id];
+
         return (
-          <div key={topic.id} className="card" style={{ padding: '14px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: '50%',
-                background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 800, flexShrink: 0,
-              }}>{i + 1}</div>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{topic.titolo}</span>
-            </div>
-            {subs.length > 0 && (
-              <div style={{ marginTop: 8, paddingLeft: 34, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {subs.map(s => (
-                  <div key={s.id} style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--text-3)', flexShrink: 0 }} />
-                    {s.titolo}
+          <div key={topic.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {/* Header */}
+            <div
+              style={{ display: 'flex', alignItems: 'stretch', gap: 14, padding: '14px 18px', cursor: subs.length > 0 ? 'pointer' : 'default' }}
+              onClick={() => subs.length > 0 && setExpanded(e => ({ ...e, [topic.id]: !e[topic.id] }))}
+            >
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {subs.length > 0
+                  ? (isExpanded ? <ChevronDown size={17} strokeWidth={2.5} color="#0d9488" /> : <ChevronRight size={17} strokeWidth={2.5} color="#0d9488" />)
+                  : <div style={{ width: 17 }} />
+                }
+                <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', display: 'inline-block', flexShrink: 0 }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, color: '#fff',
+                    background: '#0d9488', borderRadius: 6,
+                    width: 36, height: 36, display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0, alignSelf: 'center',
+                  }}>{i + 1}</span>
+                  <div style={{ width: 14, flexShrink: 0 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+                      {topic.titolo}
+                    </div>
+                    {topic.descrizione && (
+                      <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3, lineHeight: 1.3 }}>{topic.descrizione}</div>
+                    )}
                   </div>
-                ))}
+                </div>
+                {/* Badge info */}
+                <div style={{ marginTop: 10, paddingLeft: 50, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {subs.length > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#0d9488', background: 'rgba(13,148,136,0.1)', borderRadius: 4, padding: '1px 7px' }}>
+                      {subs.length} {subs.length === 1 ? 'sottoargomento' : 'sottoargomenti'}
+                    </span>
+                  )}
+                  {subs.length > 0 ? (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, borderRadius: 4, padding: '1px 7px',
+                      color: tuttiTrattati ? '#16a34a' : trattatiCount > 0 ? '#d97706' : '#ef4444',
+                      background: tuttiTrattati ? 'rgba(22,163,74,0.1)' : trattatiCount > 0 ? 'rgba(217,119,6,0.1)' : 'rgba(239,68,68,0.1)',
+                    }}>{trattatiCount}/{trattatiTotal} trattati</span>
+                  ) : topicsDoneIds.includes(topic.id) ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 7px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: '50%', background: '#16a34a' }}>
+                        <Check size={9} strokeWidth={3} color="#fff" />
+                      </span>
+                      Trattato
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.1)', borderRadius: 4, padding: '1px 7px' }}>Non trattato</span>
+                  )}
+                  {lezioniTopic.length > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>
+                      {lezioniTopic.length} {lezioniTopic.length === 1 ? 'lezione' : 'lezioni'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Sottoargomenti espansi */}
+            {isExpanded && subs.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--border)', background: 'var(--bg)', padding: '10px 18px 14px 88px' }}>
+                {subs.map((sub, si) => {
+                  const isLast = si === subs.length - 1;
+                  const isDone = (subsDone[sub.id]) !== undefined;
+                  const dateTrattato = isDone
+                    ? subsDone[sub.id].map(d => format(parseISO(d), 'd MMM yyyy', { locale: it }))
+                    : [];
+                  return (
+                    <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+                      <div style={{ position: 'absolute', left: -24, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: '#0d9488', opacity: 0.25 }} />
+                      <div style={{ position: 'absolute', left: -24, top: '50%', width: 24, height: 2, background: '#0d9488', opacity: 0.25 }} />
+                      <span style={{
+                        fontSize: 11, fontWeight: 600,
+                        color: isDone ? '#16a34a' : '#ef4444',
+                        border: `1.5px solid ${isDone ? '#16a34a' : '#ef4444'}`,
+                        borderRadius: 6, width: 32, height: 32,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0, margin: '9px 0',
+                        background: isDone ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.08)',
+                      }}>{i + 1}.{si + 1}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{sub.titolo}</span>
+                        {isDone && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: '#16a34a', marginLeft: 6, verticalAlign: 'middle' }}>
+                            <Check size={10} strokeWidth={3} color="#fff" />
+                          </span>
+                        )}
+                        {isDone && (
+                          <span style={{ display: 'block', fontSize: 11, color: '#16a34a', fontWeight: 500, marginTop: 1 }}>
+                            {dateTrattato.join(' · ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -51,11 +174,10 @@ function ProgrammaList({ topics }) {
   );
 }
 
-function ProgrammaPerCorso({ corsoId, classeId, nomeCorso, color, user }) {
-  const { db: _db } = { db: null };
+function ProgrammaPerCorso({ corsoId, classeId, nomeCorso, color, user, corsoSlug, classeSlug, lezioniCorso }) {
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { db: fireDb } = { db: null };
+  const [open, setOpen] = useState(true);
 
   useEffect(() => {
     if (!user || !corsoId || !classeId) return;
@@ -69,17 +191,51 @@ function ProgrammaPerCorso({ corsoId, classeId, nomeCorso, color, user }) {
   }, [user, corsoId, classeId]);
 
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4 }}>
-        {nomeCorso}
-      </div>
-      {loading ? (
+    <div style={{ marginBottom: 20 }}>
+      {/* Intestazione corso — cliccabile */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 4px', background: 'none', border: 'none', cursor: 'pointer',
+          marginBottom: open ? 10 : 4,
+        }}
+      >
+        {open ? <ChevronDown size={16} color={color} /> : <ChevronRight size={16} color={color} />}
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color }}>{nomeCorso}</span>
+        {!loading && (
+          <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500 }}>
+            {topics.length} {topics.length === 1 ? 'argomento' : 'argomenti'}
+          </span>
+        )}
+        {corsoSlug && classeSlug && (
+          <Link
+            to={`/corsi/${corsoSlug}/classi/${classeSlug}?tab=programma`}
+            onClick={e => e.stopPropagation()}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)', textDecoration: 'none', marginLeft: 'auto' }}
+            onMouseEnter={e => e.currentTarget.style.color = color}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}
+          >
+            <ExternalLink size={12} /> Modifica programma
+          </Link>
+        )}
+      </button>
+
+      {open && (loading ? (
         <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>Caricamento...</div>
       ) : topics.length === 0 ? (
-        <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>Nessun argomento</div>
+        <div className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Nessun argomento ancora inserito.</span>
+          {corsoSlug && classeSlug && (
+            <Link to={`/corsi/${corsoSlug}/classi/${classeSlug}?tab=programma`} style={{ fontSize: 12, color, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <ExternalLink size={12} /> Aggiungi argomenti
+            </Link>
+          )}
+        </div>
       ) : (
-        <ProgrammaList topics={topics} />
-      )}
+        <ProgrammaList topics={topics} lezioniCorso={lezioniCorso} />
+      ))}
     </div>
   );
 }
@@ -106,13 +262,22 @@ export default function ClasseOverview() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo]   = useState('');
   const [editLezione, setEditLezione]   = useState(null);
+  const [collapsedMesi, setCollapsedMesi] = useState({});
+  const toggleMese = (key) => setCollapsedMesi(prev => {
+    const current = prev[key] !== undefined ? prev[key] : true;
+    return { ...prev, [key]: !current };
+  });
 
-  // ── Corso selezionato (per Programma ed Elaborati) ───────────────────────
+  // ── Programma map per le lezioni (argomentoId → titolo per corso) ───────
+  const [programmaMap, setProgrammaMap] = useState({}); // { [corsoId]: [{ id, titolo, ... }] }
+
+  // ── Corso selezionato (per Elaborati) ────────────────────────────────────
   const [selectedCorsoId, setSelectedCorsoId] = useState('');
-  const [programmaCorso, setProgrammaCorso]   = useState([]);
-  const [loadingProgramma, setLoadingProgramma] = useState(false);
   const [tabDateFrom, setTabDateFrom] = useState('');
   const [tabDateTo, setTabDateTo]     = useState('');
+
+  // ── Filtro chip per Programma (Set di corsoId selezionati) ───────────────
+  const [corsiProgrammaFiltro, setCorsiProgrammaFiltro] = useState(null); // null = tutti
   const [selected, setSelected]     = useState(null);
 
   const [showAddModal, setShowAddModal]       = useState(false);
@@ -176,14 +341,17 @@ export default function ClasseOverview() {
     if (corsi.length > 0 && !selectedCorsoId) setSelectedCorsoId(corsi[0].id);
   }, [corsi]);
 
-  // Carica programma per il corso selezionato
+
+  // Carica programma per tutti i corsi (usato nella tab Lezioni)
   useEffect(() => {
-    if (!user || !selectedCorsoId || !classeId) return;
-    setLoadingProgramma(true);
-    getDocs(collection(db, 'users', user.uid, 'corsi', selectedCorsoId, 'classi', classeId, 'programma'))
-      .then(snap => setProgrammaCorso(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordine ?? 999) - (b.ordine ?? 999))))
-      .finally(() => setLoadingProgramma(false));
-  }, [user, selectedCorsoId, classeId]);
+    if (!user || !classeId || corsi.length === 0) return;
+    Promise.all(
+      corsi.map(c =>
+        getDocs(collection(db, 'users', user.uid, 'corsi', c.id, 'classi', classeId, 'programma'))
+          .then(snap => [c.id, snap.docs.map(d => ({ id: d.id, ...d.data() }))])
+      )
+    ).then(results => setProgrammaMap(Object.fromEntries(results)));
+  }, [user, classeId, corsi]);
 
   useEffect(() => {
     if (!user || !classeId) return;
@@ -338,12 +506,12 @@ export default function ClasseOverview() {
     });
   }, [lezioni, filterCorso, filterDateFrom, filterDateTo]);
 
-  // Raggruppa per mese
+  // Raggruppa per mese (chiave yyyy-MM per confronto)
   const lezioniPerMese = useMemo(() => {
     const groups = {};
     lezoniFiltrate.forEach(l => {
       if (!l.data) return;
-      const key = format(parseISO(l.data), 'MMMM yyyy', { locale: it });
+      const key = format(parseISO(l.data), 'yyyy-MM');
       if (!groups[key]) groups[key] = [];
       groups[key].push(l);
     });
@@ -610,12 +778,26 @@ export default function ClasseOverview() {
                 </div>
               </div>
             ) : (
-              Object.entries(lezioniPerMese).map(([month, lezMese]) => (
-                <div key={month}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
-                    {month}
-                  </div>
-                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              (() => {
+                const currentMonthKey = format(new Date(), 'yyyy-MM');
+                return Object.entries(lezioniPerMese)
+                  .sort((a, b) => b[0].localeCompare(a[0]))
+                  .map(([monthKey, lezMese]) => {
+                const isPastMonth = monthKey < currentMonthKey;
+                const isOpen = collapsedMesi[monthKey] !== undefined ? collapsedMesi[monthKey] : monthKey === currentMonthKey;
+                const [yyyy, mm] = monthKey.split('-');
+                const meseLabel = (() => { const s = format(new Date(parseInt(yyyy), parseInt(mm) - 1, 1), 'MMMM yyyy', { locale: it }); return s.charAt(0).toUpperCase() + s.slice(1); })();
+                return (
+                <div key={monthKey} style={{ opacity: isPastMonth ? 0.45 : 1, transition: 'opacity 0.15s' }}>
+                  <button
+                    onClick={() => toggleMese(monthKey)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', marginBottom: isOpen ? 8 : 4 }}
+                  >
+                    {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{meseLabel}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 4 }}>{lezMese.length} {lezMese.length === 1 ? 'lezione' : 'lezioni'}</span>
+                  </button>
+                  {isOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                     {lezMese.map((l, idx) => {
                       const color = corsoColor(l.corsoId);
                       const durataMins = l.durata || 0;
@@ -628,28 +810,39 @@ export default function ClasseOverview() {
                       const presenzeUrl = corso?.slug
                         ? `/corsi/${corso.slug}/classi/${classeSlug}?tab=presenze&date=${l.data}`
                         : null;
+                      const d = parseISO(l.data);
+                      const past = l.data < format(new Date(), 'yyyy-MM-dd');
+                      const giornoNum = format(d, 'dd');
+                      const giornoSett = format(d, 'EEE', { locale: it }).toUpperCase();
+                      const progList = programmaMap[l.corsoId] || [];
+                      const argomento = l.argomentoId ? progList.find(p => p.id === l.argomentoId) : null;
+                      const titoloLezione = argomento?.titolo || l.note || 'Lezione';
                       return (
-                        <div key={l.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px',
-                          borderBottom: idx < lezMese.length - 1 ? '1px solid var(--border)' : 'none',
+                        <div key={l.id} className="card" style={{
+                          display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px',
                         }}>
-                          {/* Data + orario + durata */}
-                          <div style={{ width: 110, flexShrink: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{format(parseISO(l.data), 'EEE dd', { locale: it })}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {l.oraInizio}–{l.oraFine}
+                          {/* Box data */}
+                          <div style={{
+                            flexShrink: 0, width: 52, textAlign: 'center',
+                            background: past ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface-el)',
+                            border: `1px solid ${past ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border)'}`,
+                            borderRadius: 10, padding: '6px 0',
+                          }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: past ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.05em' }}>{giornoSett}</div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
+                          </div>
+                          {/* Titolo + corso chip + orario */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titoloLezione}</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: `${color}15`, color, border: `1px solid ${color}30`, flexShrink: 0 }}>
+                                {l.nomeCorso}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Clock size={12} /> {l.oraInizio}–{l.oraFine}
                               {durataStr && <span style={{ color: 'var(--text-3)' }}>· {durataStr}</span>}
                             </div>
-                          </div>
-                          {/* Corso pill */}
-                          <div style={{ flexShrink: 0 }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: `${color}15`, color, border: `1px solid ${color}30` }}>
-                              {l.nomeCorso}
-                            </span>
-                          </div>
-                          {/* Note */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            {l.note && <div style={{ fontSize: 13, color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.note}</div>}
                           </div>
                           {/* Azioni */}
                           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -676,15 +869,17 @@ export default function ClasseOverview() {
                         </div>
                       );
                     })}
-                  </div>
+                  </div>}
                 </div>
-              ))
+              );
+              });
+              })()
             )}
           </div>
         )} {/* fine tab lezioni */}
 
-        {/* ── Selettore corso condiviso (Programma + Elaborati) ── */}
-        {(tab === 'programma' || tab === 'elaborati') && (
+        {/* ── Filtro Elaborati ── */}
+        {tab === 'elaborati' && (
           <div className="card" style={{ padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
             <div className="form-group" style={{ marginBottom: 0, minWidth: 180 }}>
               <label className="form-label" style={{ marginBottom: 4, display: 'block' }}>Corso</label>
@@ -704,40 +899,89 @@ export default function ClasseOverview() {
             {(tabDateFrom || tabDateTo) && (
               <button className="btn btn-ghost btn-sm" onClick={() => { setTabDateFrom(''); setTabDateTo(''); }} style={{ marginBottom: 2 }}>Reset</button>
             )}
-            {selectedCorsoId && corsi.find(c => c.id === selectedCorsoId)?.slug && (
-              <Link
-                to={`/corsi/${corsi.find(c => c.id === selectedCorsoId).slug}/classi/${classeSlug}?tab=${tab === 'programma' ? 'programma' : 'esercitazioni'}`}
-                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--accent)', textDecoration: 'none', marginBottom: 2 }}
-              >
-                <ExternalLink size={14} /> Apri in ClasseDetail
-              </Link>
-            )}
           </div>
         )}
 
         {/* ── Tab Programma ── */}
         {tab === 'programma' && (
           <>
-          {/* Singolo corso */}
-          {selectedCorsoId && (
-            <div>
-              {loadingProgramma ? (
-                <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>
-              ) : programmaCorso.length === 0 ? (
-                <div className="empty-state">
-                  <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-                  <div className="empty-state-title">Nessun argomento</div>
-                  <div className="empty-state-text">Il programma per questo corso non è ancora stato compilato.</div>
-                </div>
-              ) : (
-                <ProgrammaList topics={programmaCorso} />
-              )}
+          {/* Chip filtro corsi */}
+          {corsi.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600, marginRight: 4 }}>Filtra:</span>
+              {[...corsi].sort((a, b) => (a.nomeCorso || '').localeCompare(b.nomeCorso || '')).map(c => {
+                const color = corsoColor(c.id);
+                const isActive = corsiProgrammaFiltro === null || corsiProgrammaFiltro.has(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setCorsiProgrammaFiltro(prev => {
+                        if (prev === null) {
+                          // deseleziona tutti tranne questo
+                          return new Set([c.id]);
+                        }
+                        const next = new Set(prev);
+                        if (next.has(c.id)) {
+                          next.delete(c.id);
+                          return next.size === 0 ? new Set() : next;
+                        } else {
+                          next.add(c.id);
+                          return next.size === corsi.length ? null : next;
+                        }
+                      });
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', border: `1.5px solid ${color}`,
+                      background: isActive ? `${color}18` : 'transparent',
+                      color: isActive ? color : 'var(--text-3)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: isActive ? color : 'var(--text-3)', flexShrink: 0 }} />
+                    {c.nomeCorso}
+                  </button>
+                );
+              })}
+              <div style={{ display: 'flex', gap: 6, marginLeft: 4 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => setCorsiProgrammaFiltro(null)} style={{ fontSize: 11 }}>
+                  Mostra tutti
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setCorsiProgrammaFiltro(new Set())} style={{ fontSize: 11 }}>
+                  Nascondi tutti
+                </button>
+              </div>
             </div>
           )}
-          {/* Tutti i corsi */}
-          {!selectedCorsoId && corsi.map(c => (
-            <ProgrammaPerCorso key={c.id} corsoId={c.id} classeId={classeId} nomeCorso={c.nomeCorso} color={corsoColor(c.id)} user={user} />
-          ))}
+
+          {/* Empty state se nessun corso selezionato */}
+          {corsiProgrammaFiltro !== null && corsiProgrammaFiltro.size === 0 ? (
+            <div className="empty-state">
+              <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+              <div className="empty-state-title">Nessun corso selezionato</div>
+              <div className="empty-state-text">Seleziona almeno un corso per visualizzare il programma.</div>
+              <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} onClick={() => setCorsiProgrammaFiltro(null)}>Mostra tutti</button>
+            </div>
+          ) : (
+            [...corsi]
+              .sort((a, b) => (a.nomeCorso || '').localeCompare(b.nomeCorso || ''))
+              .filter(c => corsiProgrammaFiltro === null || corsiProgrammaFiltro.has(c.id))
+              .map(c => (
+                <ProgrammaPerCorso
+                  key={c.id}
+                  corsoId={c.id}
+                  classeId={classeId}
+                  nomeCorso={c.nomeCorso}
+                  color={corsoColor(c.id)}
+                  user={user}
+                  corsoSlug={c.slug}
+                  classeSlug={classeSlug}
+                  lezioniCorso={lezioni.filter(l => l.corsoId === c.id)}
+                />
+              ))
+          )}
           </>
         )}
 
