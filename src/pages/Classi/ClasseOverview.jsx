@@ -45,6 +45,8 @@ export default function ClasseOverview() {
   const [selectedCorsoId, setSelectedCorsoId] = useState('');
   const [programmaCorso, setProgrammaCorso]   = useState([]);
   const [loadingProgramma, setLoadingProgramma] = useState(false);
+  const [tabDateFrom, setTabDateFrom] = useState('');
+  const [tabDateTo, setTabDateTo]     = useState('');
   const [selected, setSelected]     = useState(null);
 
   const [showAddModal, setShowAddModal]       = useState(false);
@@ -617,26 +619,28 @@ export default function ClasseOverview() {
 
         {/* ── Selettore corso condiviso (Programma + Elaborati) ── */}
         {(tab === 'programma' || tab === 'elaborati') && (
-          <div className="card" style={{ padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <label className="form-label" style={{ marginBottom: 0, whiteSpace: 'nowrap' }}>Corso</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {corsi.map(c => {
-                const color = corsoColor(c.id);
-                const isSelected = selectedCorsoId === c.id;
-                return (
-                  <button key={c.id} onClick={() => setSelectedCorsoId(c.id)} style={{
-                    padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-                    cursor: 'pointer', border: `1.5px solid ${isSelected ? color : 'var(--border)'}`,
-                    background: isSelected ? `${color}18` : 'transparent',
-                    color: isSelected ? color : 'var(--text-2)', transition: 'all 0.15s',
-                  }}>{c.nomeCorso}</button>
-                );
-              })}
+          <div className="card" style={{ padding: '14px 16px', marginBottom: 20, display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 180 }}>
+              <label className="form-label" style={{ marginBottom: 4, display: 'block' }}>Corso</label>
+              <select className="form-input" style={{ margin: 0 }} value={selectedCorsoId} onChange={e => setSelectedCorsoId(e.target.value)}>
+                {corsi.map(c => <option key={c.id} value={c.id}>{c.nomeCorso}</option>)}
+              </select>
             </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ marginBottom: 4, display: 'block' }}>Dal</label>
+              <input type="date" className="form-input" style={{ margin: 0 }} value={tabDateFrom} onChange={e => setTabDateFrom(e.target.value)} />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ marginBottom: 4, display: 'block' }}>Al</label>
+              <input type="date" className="form-input" style={{ margin: 0 }} value={tabDateTo} onChange={e => setTabDateTo(e.target.value)} />
+            </div>
+            {(tabDateFrom || tabDateTo) && (
+              <button className="btn btn-ghost btn-sm" onClick={() => { setTabDateFrom(''); setTabDateTo(''); }} style={{ marginBottom: 2 }}>Reset</button>
+            )}
             {selectedCorsoId && corsi.find(c => c.id === selectedCorsoId)?.slug && (
               <Link
                 to={`/corsi/${corsi.find(c => c.id === selectedCorsoId).slug}/classi/${classeSlug}?tab=${tab === 'programma' ? 'programma' : 'esercitazioni'}`}
-                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }}
+                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--accent)', textDecoration: 'none', marginBottom: 2 }}
               >
                 <ExternalLink size={14} /> Apri in ClasseDetail
               </Link>
@@ -689,7 +693,7 @@ export default function ClasseOverview() {
 
         {/* ── Tab Elaborati ── */}
         {tab === 'elaborati' && selectedCorsoId && classeId && (
-          <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} />
+          <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
         )}
 
       </div>

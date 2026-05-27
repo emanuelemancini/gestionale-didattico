@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../services/firebase';
 import { useAuth } from '../../../context/AuthContext';
@@ -48,7 +48,7 @@ function votoBg(v) {
   return 'rgba(239,68,68,0.1)';
 }
 
-export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
+export default function EsercitazioniTab({ corsoId, classeId, studentiCount, filterDateFrom = '', filterDateTo = '' }) {
   const { user } = useAuth();
   const toast = useToast();
 
@@ -104,6 +104,17 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
   const editingCellRef = useRef(null);
   const cellValueRef = useRef('');
   const saveCellRef = useRef(null);
+
+  // Filtro per data
+  const inRange = (dateStr) => {
+    if (!dateStr) return true;
+    if (filterDateFrom && dateStr < filterDateFrom) return false;
+    if (filterDateTo && dateStr > filterDateTo) return false;
+    return true;
+  };
+  const esercitazioniFiltrate = useMemo(() => esercitazioni.filter(e => inRange(e.data_scadenza)), [esercitazioni, filterDateFrom, filterDateTo]);
+  const consegneItemsFiltrate = useMemo(() => consegneItems.filter(c => inRange(c.data_scadenza)), [consegneItems, filterDateFrom, filterDateTo]);
+  const proveFiltrate         = useMemo(() => prove.filter(p => inRange(p.data)), [prove, filterDateFrom, filterDateTo]);
 
   useEffect(() => { editingCellRef.current = editingCell; }, [editingCell]);
   useEffect(() => { cellValueRef.current = cellValue; }, [cellValue]);
@@ -495,7 +506,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
               </div>
             ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {esercitazioni.map(es => {
+            {esercitazioniFiltrate.map(es => {
               const scadenzaObj = (() => {
                 if (!es.data_scadenza) return null;
                 if (typeof es.data_scadenza === 'object' && es.data_scadenza.toDate) return es.data_scadenza.toDate();
@@ -672,7 +683,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {consegneItems.map(ci => {
+                {consegneItemsFiltrate.map(ci => {
                   const scadenzaObj = (() => {
                     if (!ci.data_scadenza) return null;
                     if (typeof ci.data_scadenza === 'object' && ci.data_scadenza.toDate) return ci.data_scadenza.toDate();
@@ -838,7 +849,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount }) {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {prove.map(p => {
+                {proveFiltrate.map(p => {
                   const votiCount = Object.keys(p.voti || {}).length;
                   const progVoti = studentiCount > 0 ? Math.round((votiCount / studentiCount) * 100) : 0;
                   const isProvaSelected = p.id === selectedProvaId;
