@@ -240,6 +240,182 @@ function ProgrammaPerCorso({ corsoId, classeId, nomeCorso, color, user, corsoSlu
   );
 }
 
+function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filterDateTo, studentiCount }) {
+  const { user } = useAuth();
+  const [items, setItems] = useState({ esercitazioni: [], consegne: [], prove: [] });
+  const [loading, setLoading] = useState(true);
+  const [expandedEserc, setExpandedEserc] = useState(false);
+  const [expandedConsegne, setExpandedConsegne] = useState(false);
+  const [expandedProve, setExpandedProve] = useState(false);
+
+  useEffect(() => {
+    if (!user || !classeId || corsi.length === 0) return;
+    setLoading(true);
+    Promise.all(corsi.map(async c => {
+      const [eSnap, ciSnap, pSnap] = await Promise.all([
+        getDocs(collection(db, 'users', user.uid, 'corsi', c.id, 'classi', classeId, 'esercitazioni')),
+        getDocs(collection(db, 'users', user.uid, 'corsi', c.id, 'classi', classeId, 'consegne')),
+        getDocs(collection(db, 'users', user.uid, 'corsi', c.id, 'classi', classeId, 'prove')),
+      ]);
+      const tag = { corsoId: c.id, nomeCorso: c.nomeCorso, corsoSlug: c.slug };
+      return {
+        esercitazioni: eSnap.docs.map(d => ({ id: d.id, ...d.data(), ...tag })),
+        consegne: ciSnap.docs.map(d => ({ id: d.id, ...d.data(), ...tag })),
+        prove: pSnap.docs.map(d => ({ id: d.id, ...d.data(), ...tag })),
+      };
+    })).then(results => {
+      const toStr = (v) => !v ? '' : (typeof v === 'string' ? v : (v.toDate ? v.toDate().toISOString() : String(v)));
+      const sortByDate = (arr, key) => [...arr].sort((a, b) => toStr(a[key]).localeCompare(toStr(b[key])));
+      setItems({
+        esercitazioni: sortByDate(results.flatMap(r => r.esercitazioni), 'data_scadenza'),
+        consegne: sortByDate(results.flatMap(r => r.consegne), 'data_scadenza'),
+        prove: sortByDate(results.flatMap(r => r.prove), 'data'),
+      });
+    }).finally(() => setLoading(false));
+  }, [user, classeId, corsi]);
+
+  const inRange = (dateStr) => {
+    if (!dateStr) return true;
+    if (filterDateFrom && dateStr < filterDateFrom) return false;
+    if (filterDateTo && dateStr > filterDateTo) return false;
+    return true;
+  };
+
+  const eserc = items.esercitazioni.filter(e => inRange(e.data_scadenza));
+  const consegne = items.consegne.filter(c => inRange(c.data_scadenza));
+  const prove = items.prove.filter(p => inRange(p.data));
+
+  const MODALITA_CONSEGNA = [{ value: 'digitale', label: 'Digitale' }, { value: 'cartacea', label: 'Cartacea' }];
+  const TIPI_PROVA = [{ value: 'midtest', label: 'Midtest' }, { value: 'verifica', label: 'Verifica' }, { value: 'orale', label: 'Orale' }, { value: 'pratico', label: 'Pratico' }];
+  const MODALITA = [{ value: 'scritto', label: 'Scritto' }, { value: 'orale', label: 'Orale' }, { value: 'pratico', label: 'Pratico' }];
+
+  const CorsoChip = ({ item }) => {
+    const color = courseColor(item.corsoId);
+    return (
+      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: `${color}15`, color, border: `1px solid ${color}30`, flexShrink: 0 }}>
+        {item.nomeCorso}
+      </span>
+    );
+  };
+
+  const ScadenzaRow = ({ item, dateKey }) => {
+    const raw = item[dateKey];
+    if (!raw) return <div style={{ fontSize: 12, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}><CalendarDays size={12} /> Nessuna scadenza</div>;
+    const d = raw.toDate ? raw.toDate() : new Date(typeof raw === 'string' && !raw.includes('T') ? raw + 'T12:00:00' : raw);
+    const scaduta = d < new Date(new Date().setHours(0,0,0,0));
+    return (
+      <div style={{ fontSize: 12, color: scaduta ? 'var(--danger)' : 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <CalendarDays size={12} />
+        {format(d, 'dd MMM yyyy', { locale: it })}
+        {scaduta && <span className="badge badge-danger" style={{ fontSize: 10 }}>Scaduta</span>}
+      </div>
+    );
+  };
+
+  const LinkGestisci = ({ item, tab }) => (
+    item.corsoSlug ? (
+      <Link to={`/corsi/${item.corsoSlug}/classi/${classeSlug}?tab=${tab}`}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', padding: '6px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none', border: '1px solid var(--border)', background: 'var(--surface-el)' }}>
+        <ClipboardList size={14} /> Gestisci Voti
+      </Link>
+    ) : null
+  );
+
+  const SectionHeader = ({ label, count, bg, border, textColor, expanded, onToggle }) => (
+    <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: bg, border: `1px solid ${border}` }} onClick={onToggle}>
+      <span style={{ color: border, display: 'flex', marginRight: 8 }}>{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+      <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: textColor }}>{label}</span>
+      <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: border, color: textColor, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{count}</span>
+    </div>
+  );
+
+  if (loading) return <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
+      {/* Colonna sinistra: Esercitazioni + Consegne */}
+      <div>
+        <SectionHeader label="Esercitazioni" count={eserc.length} bg="#dbeafe" border="#93c5fd" textColor="#1e3a8a" expanded={expandedEserc} onToggle={() => setExpandedEserc(v => !v)} />
+        {expandedEserc && (
+          eserc.length === 0
+            ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna esercitazione</div></div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 8 }}>
+                {eserc.map(es => (
+                  <div key={`${es.corsoId}-${es.id}`} className="card" style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{es.titolo}</h3>
+                      <CorsoChip item={es} />
+                    </div>
+                    <ScadenzaRow item={es} dateKey="data_scadenza" />
+                    {es.descrizione && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{es.descrizione}</p>}
+                    <LinkGestisci item={es} tab="esercitazioni" />
+                  </div>
+                ))}
+              </div>
+        )}
+
+        <div style={{ marginTop: expandedEserc ? 16 : 0 }}>
+          <SectionHeader label="Consegne" count={consegne.length} bg="#ffedd5" border="#fdba74" textColor="#7c2d12" expanded={expandedConsegne} onToggle={() => setExpandedConsegne(v => !v)} />
+          {expandedConsegne && (
+            consegne.length === 0
+              ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna consegna</div></div>
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {consegne.map(ci => (
+                    <div key={`${ci.corsoId}-${ci.id}`} className="card" style={{ background: '#fff7ed', border: '1px solid #ffedd5' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{ci.titolo}</h3>
+                        <CorsoChip item={ci} />
+                      </div>
+                      <ScadenzaRow item={ci} dateKey="data_scadenza" />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {(ci.modalita || []).map(m => (
+                          <span key={m} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' }}>
+                            {MODALITA_CONSEGNA.find(x => x.value === m)?.label || m}
+                          </span>
+                        ))}
+                      </div>
+                      {ci.descrizione && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ci.descrizione}</p>}
+                      <LinkGestisci item={ci} tab="esercitazioni" />
+                    </div>
+                  ))}
+                </div>
+          )}
+        </div>
+      </div>
+
+      {/* Colonna destra: Prove */}
+      <div>
+        <SectionHeader label="Prove" count={prove.length} bg="#fee2e2" border="#fca5a5" textColor="#7f1d1d" expanded={expandedProve} onToggle={() => setExpandedProve(v => !v)} />
+        {expandedProve && (
+          prove.length === 0
+            ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna prova</div></div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {prove.map(p => (
+                  <div key={`${p.corsoId}-${p.id}`} className="card" style={{ background: '#fff5f5', border: '1px solid #fee2e2' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{p.titolo}</h3>
+                      <CorsoChip item={p} />
+                    </div>
+                    <ScadenzaRow item={p} dateKey="data" />
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
+                        {TIPI_PROVA.find(t => t.value === p.tipo)?.label || p.tipo}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
+                        {MODALITA.find(m => m.value === p.modalita)?.label || p.modalita}
+                      </span>
+                    </div>
+                    {p.descrizione && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.descrizione}</p>}
+                    <LinkGestisci item={p} tab="esercitazioni" />
+                  </div>
+                ))}
+              </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ClasseOverview() {
   const { classeSlug } = useParams();
   const { user } = useAuth();
@@ -987,20 +1163,9 @@ export default function ClasseOverview() {
 
         {/* ── Tab Elaborati ── */}
         {tab === 'elaborati' && classeId && (
-          <>
-          {selectedCorsoId ? (
-            <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
-          ) : (
-            corsi.map(c => (
-              <div key={c.id} style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: corsoColor(c.id), textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>
-                  {c.nomeCorso}
-                </div>
-                <EsercitazioniTab corsoId={c.id} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
-              </div>
-            ))
-          )}
-          </>
+          selectedCorsoId
+            ? <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
+            : <ElaboratiAllCorsi corsi={corsi} classeId={classeId} classeSlug={classeSlug} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} studentiCount={studenti.length} />
         )}
 
       </div>
