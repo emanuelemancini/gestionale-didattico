@@ -9,8 +9,9 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
-import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList } from 'lucide-react';
+import { Search, BookOpen, ChevronRight, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList, FileText, CheckSquare, ExternalLink } from 'lucide-react';
 import LessonModal from '../../components/ui/LessonModal';
+import EsercitazioniTab from './tabs/EsercitazioniTab';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -39,6 +40,11 @@ export default function ClasseOverview() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo]   = useState('');
   const [editLezione, setEditLezione]   = useState(null);
+
+  // ── Corso selezionato (per Programma ed Elaborati) ───────────────────────
+  const [selectedCorsoId, setSelectedCorsoId] = useState('');
+  const [programmaCorso, setProgrammaCorso]   = useState([]);
+  const [loadingProgramma, setLoadingProgramma] = useState(false);
   const [selected, setSelected]     = useState(null);
 
   const [showAddModal, setShowAddModal]       = useState(false);
@@ -96,6 +102,20 @@ export default function ClasseOverview() {
   };
 
   useEffect(() => { loadData(); }, [classeSlug, user]);
+
+  // Auto-seleziona il primo corso disponibile
+  useEffect(() => {
+    if (corsi.length > 0 && !selectedCorsoId) setSelectedCorsoId(corsi[0].id);
+  }, [corsi]);
+
+  // Carica programma per il corso selezionato
+  useEffect(() => {
+    if (!user || !selectedCorsoId || !classeId) return;
+    setLoadingProgramma(true);
+    getDocs(collection(db, 'users', user.uid, 'corsi', selectedCorsoId, 'classi', classeId, 'programma'))
+      .then(snap => setProgrammaCorso(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordine ?? 999) - (b.ordine ?? 999))))
+      .finally(() => setLoadingProgramma(false));
+  }, [user, selectedCorsoId, classeId]);
 
   useEffect(() => {
     if (!user || !classeId) return;
@@ -280,7 +300,7 @@ export default function ClasseOverview() {
 
         {/* ── Tab bar ── */}
         <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--border)', marginBottom: 20 }}>
-          {[{ id: 'lezioni', label: 'Lezioni' }, { id: 'studenti', label: 'Studenti' }].map(t => (
+          {[{ id: 'lezioni', label: 'Lezioni' }, { id: 'programma', label: 'Programma Didattico' }, { id: 'elaborati', label: 'Elaborati' }, { id: 'studenti', label: 'Studenti' }].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               background: 'none', border: 'none', cursor: 'pointer',
               padding: '10px 20px', fontSize: 14, fontWeight: tab === t.id ? 600 : 400,
@@ -566,12 +586,13 @@ export default function ClasseOverview() {
                           {/* Azioni */}
                           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                             {presenzeUrl && (
-                              <Link to={presenzeUrl} title="Presenze" style={{
-                                width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border)',
-                                background: 'var(--surface-el)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: 'var(--text-2)', textDecoration: 'none', flexShrink: 0,
+                              <Link to={presenzeUrl} style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                padding: '6px 14px', borderRadius: 8, flexShrink: 0,
+                                background: 'var(--accent)', color: '#fff',
+                                textDecoration: 'none', fontSize: 13, fontWeight: 600,
                               }}>
-                                <ClipboardList size={14} />
+                                <ClipboardList size={14} /> Presenze
                               </Link>
                             )}
                             <button
@@ -593,6 +614,83 @@ export default function ClasseOverview() {
             )}
           </div>
         )} {/* fine tab lezioni */}
+
+        {/* ── Selettore corso condiviso (Programma + Elaborati) ── */}
+        {(tab === 'programma' || tab === 'elaborati') && (
+          <div className="card" style={{ padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <label className="form-label" style={{ marginBottom: 0, whiteSpace: 'nowrap' }}>Corso</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {corsi.map(c => {
+                const color = corsoColor(c.id);
+                const isSelected = selectedCorsoId === c.id;
+                return (
+                  <button key={c.id} onClick={() => setSelectedCorsoId(c.id)} style={{
+                    padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer', border: `1.5px solid ${isSelected ? color : 'var(--border)'}`,
+                    background: isSelected ? `${color}18` : 'transparent',
+                    color: isSelected ? color : 'var(--text-2)', transition: 'all 0.15s',
+                  }}>{c.nomeCorso}</button>
+                );
+              })}
+            </div>
+            {selectedCorsoId && corsi.find(c => c.id === selectedCorsoId)?.slug && (
+              <Link
+                to={`/corsi/${corsi.find(c => c.id === selectedCorsoId).slug}/classi/${classeSlug}?tab=${tab === 'programma' ? 'programma' : 'esercitazioni'}`}
+                style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }}
+              >
+                <ExternalLink size={14} /> Apri in ClasseDetail
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab Programma ── */}
+        {tab === 'programma' && selectedCorsoId && (
+          <div>
+            {loadingProgramma ? (
+              <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>
+            ) : programmaCorso.length === 0 ? (
+              <div className="empty-state">
+                <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                <div className="empty-state-title">Nessun argomento</div>
+                <div className="empty-state-text">Il programma per questo corso non è ancora stato compilato.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {programmaCorso.map((topic, i) => {
+                  const subs = topic.sottoargomenti || [];
+                  return (
+                    <div key={topic.id} className="card" style={{ padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 24, height: 24, borderRadius: '50%', background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                          color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 11, fontWeight: 800, flexShrink: 0,
+                        }}>{i + 1}</div>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{topic.titolo}</span>
+                      </div>
+                      {subs.length > 0 && (
+                        <div style={{ marginTop: 8, paddingLeft: 34, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {subs.map(s => (
+                            <div key={s.id} style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--text-3)', flexShrink: 0 }} />
+                              {s.titolo}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab Elaborati ── */}
+        {tab === 'elaborati' && selectedCorsoId && classeId && (
+          <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} />
+        )}
 
       </div>
 

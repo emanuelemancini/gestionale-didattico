@@ -786,6 +786,8 @@ export default function ClasseDetail() {
                       {isOpen && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                           {meseLezList.map(lez => {
+                            const todayStr = format(new Date(), 'yyyy-MM-dd');
+                            const isToday = lez.data === todayStr;
                             const past = new Date(lez.data) < now;
                             const d = new Date(lez.data);
                             const giornoNum = format(d, 'dd');
@@ -813,15 +815,21 @@ export default function ClasseDetail() {
                               return `${h} ${h === 1 ? 'ora' : 'ore'} ${m}min`;
                             })() : null;
                             return (
-                              <div key={lez.id} className="card" style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center' }}>
+                              <div key={lez.id} className="card" style={{
+                                display: 'flex', gap: 16, padding: 16, alignItems: 'center',
+                                ...(isToday ? { border: '2px solid var(--accent)', background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))' } : {}),
+                              }}>
+                                {isToday && (
+                                  <div style={{ position: 'absolute', top: 8, left: 8 }} />
+                                )}
                                 <div style={{
                                   flexShrink: 0, width: 52, textAlign: 'center',
-                                  background: past ? 'var(--accent)12' : 'var(--surface-el)',
-                                  border: `1px solid ${past ? 'var(--accent)30' : 'var(--border)'}`,
+                                  background: isToday ? 'var(--accent)' : past ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface-el)',
+                                  border: `1px solid ${isToday ? 'var(--accent)' : past ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border)'}`,
                                   borderRadius: 10, padding: '6px 0',
                                 }}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: past ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.05em' }}>{giornoSett}</div>
-                                  <div style={{ fontSize: 22, fontWeight: 800, color: past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? '#fff' : past ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.05em' }}>{giornoSett}</div>
+                                  <div style={{ fontSize: 22, fontWeight: 800, color: isToday ? '#fff' : past ? 'var(--accent)' : 'var(--text)', lineHeight: 1.1 }}>{giornoNum}</div>
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -830,6 +838,7 @@ export default function ClasseDetail() {
                                         <span key={i} style={{ lineHeight: 1.4 }}>{riga}</span>
                                       ))}
                                     </span>
+                                    {isToday && <span className="badge" style={{ flexShrink: 0, background: 'var(--accent)', color: '#fff' }}>Oggi</span>}
                                     <span className={`badge ${past ? 'badge-success' : 'badge-blue'}`} style={{ flexShrink: 0 }}>{past ? 'Svolta' : 'In programma'}</span>
                                   </div>
                                   <div style={{ fontSize: 12, color: 'var(--text-2)', display: 'flex', gap: 12 }}>
