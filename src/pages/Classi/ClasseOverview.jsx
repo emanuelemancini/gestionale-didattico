@@ -512,10 +512,6 @@ export default function ClasseOverview() {
 
   useEffect(() => { loadData(); }, [classeSlug, user]);
 
-  // Auto-seleziona il primo corso disponibile
-  useEffect(() => {
-    if (corsi.length > 0 && !selectedCorsoId) setSelectedCorsoId(corsi[0].id);
-  }, [corsi]);
 
 
   // Carica programma per tutti i corsi (usato nella tab Lezioni)
