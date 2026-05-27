@@ -18,6 +18,72 @@ import { it } from 'date-fns/locale';
 import { courseColor } from '../../utils/colors';
 function corsoColor(id) { return courseColor(id); }
 
+function ProgrammaList({ topics }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {topics.map((topic, i) => {
+        const subs = topic.sottoargomenti || [];
+        return (
+          <div key={topic.id} className="card" style={{ padding: '14px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%',
+                background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 800, flexShrink: 0,
+              }}>{i + 1}</div>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{topic.titolo}</span>
+            </div>
+            {subs.length > 0 && (
+              <div style={{ marginTop: 8, paddingLeft: 34, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {subs.map(s => (
+                  <div key={s.id} style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--text-3)', flexShrink: 0 }} />
+                    {s.titolo}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProgrammaPerCorso({ corsoId, classeId, nomeCorso, color, user }) {
+  const { db: _db } = { db: null };
+  const [topics, setTopics] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { db: fireDb } = { db: null };
+
+  useEffect(() => {
+    if (!user || !corsoId || !classeId) return;
+    import('firebase/firestore').then(({ collection, getDocs }) => {
+      import('../../services/firebase').then(({ db }) => {
+        getDocs(collection(db, 'users', user.uid, 'corsi', corsoId, 'classi', classeId, 'programma'))
+          .then(snap => setTopics(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ordine ?? 999) - (b.ordine ?? 999))))
+          .finally(() => setLoading(false));
+      });
+    });
+  }, [user, corsoId, classeId]);
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4 }}>
+        {nomeCorso}
+      </div>
+      {loading ? (
+        <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>Caricamento...</div>
+      ) : topics.length === 0 ? (
+        <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>Nessun argomento</div>
+      ) : (
+        <ProgrammaList topics={topics} />
+      )}
+    </div>
+  );
+}
+
 export default function ClasseOverview() {
   const { classeSlug } = useParams();
   const { user } = useAuth();
@@ -623,6 +689,7 @@ export default function ClasseOverview() {
             <div className="form-group" style={{ marginBottom: 0, minWidth: 180 }}>
               <label className="form-label" style={{ marginBottom: 4, display: 'block' }}>Corso</label>
               <select className="form-input" style={{ margin: 0 }} value={selectedCorsoId} onChange={e => setSelectedCorsoId(e.target.value)}>
+                <option value="">Tutti i corsi</option>
                 {corsi.map(c => <option key={c.id} value={c.id}>{c.nomeCorso}</option>)}
               </select>
             </div>
@@ -649,51 +716,47 @@ export default function ClasseOverview() {
         )}
 
         {/* ── Tab Programma ── */}
-        {tab === 'programma' && selectedCorsoId && (
-          <div>
-            {loadingProgramma ? (
-              <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>
-            ) : programmaCorso.length === 0 ? (
-              <div className="empty-state">
-                <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-                <div className="empty-state-title">Nessun argomento</div>
-                <div className="empty-state-text">Il programma per questo corso non è ancora stato compilato.</div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {programmaCorso.map((topic, i) => {
-                  const subs = topic.sottoargomenti || [];
-                  return (
-                    <div key={topic.id} className="card" style={{ padding: '14px 18px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{
-                          width: 24, height: 24, borderRadius: '50%', background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                          color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 11, fontWeight: 800, flexShrink: 0,
-                        }}>{i + 1}</div>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{topic.titolo}</span>
-                      </div>
-                      {subs.length > 0 && (
-                        <div style={{ marginTop: 8, paddingLeft: 34, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {subs.map(s => (
-                            <div key={s.id} style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--text-3)', flexShrink: 0 }} />
-                              {s.titolo}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {tab === 'programma' && (
+          <>
+          {/* Singolo corso */}
+          {selectedCorsoId && (
+            <div>
+              {loadingProgramma ? (
+                <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>
+              ) : programmaCorso.length === 0 ? (
+                <div className="empty-state">
+                  <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                  <div className="empty-state-title">Nessun argomento</div>
+                  <div className="empty-state-text">Il programma per questo corso non è ancora stato compilato.</div>
+                </div>
+              ) : (
+                <ProgrammaList topics={programmaCorso} />
+              )}
+            </div>
+          )}
+          {/* Tutti i corsi */}
+          {!selectedCorsoId && corsi.map(c => (
+            <ProgrammaPerCorso key={c.id} corsoId={c.id} classeId={classeId} nomeCorso={c.nomeCorso} color={corsoColor(c.id)} user={user} />
+          ))}
+          </>
         )}
 
         {/* ── Tab Elaborati ── */}
-        {tab === 'elaborati' && selectedCorsoId && classeId && (
-          <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
+        {tab === 'elaborati' && classeId && (
+          <>
+          {selectedCorsoId ? (
+            <EsercitazioniTab corsoId={selectedCorsoId} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
+          ) : (
+            corsi.map(c => (
+              <div key={c.id} style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: corsoColor(c.id), textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 }}>
+                  {c.nomeCorso}
+                </div>
+                <EsercitazioniTab corsoId={c.id} classeId={classeId} studentiCount={studenti.length} filterDateFrom={tabDateFrom} filterDateTo={tabDateTo} />
+              </div>
+            ))
+          )}
+          </>
         )}
 
       </div>
