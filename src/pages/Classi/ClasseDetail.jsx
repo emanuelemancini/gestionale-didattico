@@ -85,6 +85,7 @@ export default function ClasseDetail() {
   const [loading, setLoading] = useState(true);
 
   const tab = searchParams.get('tab') || 'lezioni';
+  const urlDate = searchParams.get('date') || null;
   const setTab = (newTab) => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('tab', newTab); return p; }, { replace: false });
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -914,7 +915,7 @@ export default function ClasseDetail() {
 
           {/* PRESENZE */}
           {tab === 'presenze' && (
-            <PresenzeTab corsoId={corsoId} classeId={classeId} studenti={studenti} initialDate={presenzeInitialDate} />
+            <PresenzeTab corsoId={corsoId} classeId={classeId} studenti={studenti} initialDate={presenzeInitialDate || urlDate} />
           )}
 
           {/* VOTI */}
