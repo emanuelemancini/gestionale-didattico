@@ -413,16 +413,17 @@ function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filter
   const ReadOnlyPanel = ({ item, accentBorder, accentBg, accentText, openType }) => {
     const isOpen = openPanel?.id === item.id;
     const innerRef = useRef(null);
-    const [height, setHeight] = useState(0);
+    const [maxHeight, setMaxHeight] = useState('0px');
+    const [opacity, setOpacity] = useState(0);
 
     useEffect(() => {
       if (!innerRef.current) return;
       if (isOpen) {
-        setHeight(innerRef.current.scrollHeight + 4);
+        setMaxHeight(`${innerRef.current.scrollHeight + 32}px`);
+        setOpacity(1);
       } else {
-        // Fissa l'altezza corrente nel DOM, poi nel frame successivo animala a 0
-        setHeight(innerRef.current.scrollHeight + 4);
-        const raf = requestAnimationFrame(() => setHeight(0));
+        setMaxHeight(`${innerRef.current.scrollHeight + 32}px`);
+        const raf = requestAnimationFrame(() => { setMaxHeight('0px'); setOpacity(0); });
         return () => cancelAnimationFrame(raf);
       }
     }, [isOpen, panelStudenti, loadingPanel]);
@@ -438,11 +439,11 @@ function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filter
       <div style={{
         margin: '0 20px',
         overflow: 'hidden',
-        height: height,
-        opacity: isOpen ? 1 : 0,
+        maxHeight,
+        opacity,
         transition: isOpen
-          ? 'height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease'
-          : 'height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease 0.05s',
+          ? 'max-height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease'
+          : 'max-height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease 0.05s',
       }}>
       <div ref={innerRef} style={{ border: `1px solid ${accentBorder}`, borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'var(--surface)' }}>
         {/* Header */}

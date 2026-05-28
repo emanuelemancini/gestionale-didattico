@@ -51,19 +51,34 @@ function votoBg(v) {
 // Wrapper animato apertura/chiusura fluida — definito fuori dal componente per evitare rimount ad ogni render
 function SlidePanel({ isOpen, children }) {
   const innerRef = useRef(null);
-  const [height, setHeight] = useState(0);
+  const [maxHeight, setMaxHeight] = useState('0px');
+  const [opacity, setOpacity] = useState(0);
+
   useEffect(() => {
     if (!innerRef.current) return;
     if (isOpen) {
-      setHeight(innerRef.current.scrollHeight + 4);
+      setMaxHeight(`${innerRef.current.scrollHeight + 32}px`);
+      setOpacity(1);
     } else {
-      setHeight(innerRef.current.scrollHeight + 4);
-      const raf = requestAnimationFrame(() => setHeight(0));
+      // Fissa l'altezza corrente poi anima verso 0
+      setMaxHeight(`${innerRef.current.scrollHeight + 32}px`);
+      const raf = requestAnimationFrame(() => { setMaxHeight('0px'); setOpacity(0); });
       return () => cancelAnimationFrame(raf);
     }
   }, [isOpen]);
+
+  // Ricalcola se il contenuto cambia mentre è aperto
+  useEffect(() => {
+    if (!isOpen || !innerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (innerRef.current) setMaxHeight(`${innerRef.current.scrollHeight + 32}px`);
+    });
+    ro.observe(innerRef.current);
+    return () => ro.disconnect();
+  }, [isOpen]);
+
   return (
-    <div style={{ overflow: 'hidden', height, opacity: isOpen ? 1 : 0, transition: isOpen ? 'height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease' : 'height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease 0.05s' }}>
+    <div style={{ overflow: 'hidden', maxHeight, opacity, transition: isOpen ? 'max-height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease' : 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease 0.05s' }}>
       <div ref={innerRef}>{children}</div>
     </div>
   );
@@ -557,7 +572,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
 
               return (
                 <div key={es.id} ref={el => cardRefs.current[es.id] = el}>
-                  <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
+                  <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                       <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{es.titolo}</h3>
@@ -735,7 +750,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                   const isSelected = ci.id === selectedConsegnaId;
                   return (
                     <div key={ci.id} ref={el => consegnaItemCardRefs.current[ci.id] = el}>
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                           <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{ci.titolo}</h3>
@@ -893,7 +908,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                   const isProvaSelected = p.id === selectedProvaId;
                   return (
                     <div key={p.id} ref={el => provaCardRefs.current[p.id] = el}>
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isProvaSelected ? '14px 14px 0 0' : 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                           <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{p.titolo}</h3>
