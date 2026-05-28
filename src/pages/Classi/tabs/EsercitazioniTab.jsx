@@ -48,6 +48,27 @@ function votoBg(v) {
   return 'rgba(239,68,68,0.1)';
 }
 
+// Wrapper animato apertura/chiusura fluida — definito fuori dal componente per evitare rimount ad ogni render
+function SlidePanel({ isOpen, children }) {
+  const innerRef = useRef(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!innerRef.current) return;
+    if (isOpen) {
+      setHeight(innerRef.current.scrollHeight + 4);
+    } else {
+      setHeight(innerRef.current.scrollHeight + 4);
+      const raf = requestAnimationFrame(() => setHeight(0));
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [isOpen]);
+  return (
+    <div style={{ overflow: 'hidden', height, opacity: isOpen ? 1 : 0, transition: isOpen ? 'height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease' : 'height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease 0.05s' }}>
+      <div ref={innerRef}>{children}</div>
+    </div>
+  );
+}
+
 export default function EsercitazioniTab({ corsoId, classeId, studentiCount, filterDateFrom = '', filterDateTo = '', initialOpenId = null, initialOpenType = null }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -495,27 +516,6 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
   };
 
   const selectedEs = esercitazioni.find(e => e.id === selectedEsId);
-
-  // Wrapper animato apertura/chiusura fluida
-  const SlidePanel = ({ isOpen, children }) => {
-    const innerRef = useRef(null);
-    const [height, setHeight] = useState(0);
-    useEffect(() => {
-      if (!innerRef.current) return;
-      if (isOpen) {
-        setHeight(innerRef.current.scrollHeight + 4);
-      } else {
-        setHeight(innerRef.current.scrollHeight + 4);
-        const raf = requestAnimationFrame(() => setHeight(0));
-        return () => cancelAnimationFrame(raf);
-      }
-    }, [isOpen]);
-    return (
-      <div style={{ overflow: 'hidden', height, opacity: isOpen ? 1 : 0, transition: isOpen ? 'height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease' : 'height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease 0.05s' }}>
-        <div ref={innerRef}>{children}</div>
-      </div>
-    );
-  };
 
   return (
     <>
