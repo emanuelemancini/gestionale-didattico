@@ -86,6 +86,8 @@ export default function ClasseDetail() {
 
   const tab = searchParams.get('tab') || 'lezioni';
   const urlDate = searchParams.get('date') || null;
+  const urlOpenId = searchParams.get('openId') || null;
+  const urlOpenType = searchParams.get('openType') || null;
   const setTab = (newTab) => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('tab', newTab); return p; }, { replace: false });
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -925,7 +927,7 @@ export default function ClasseDetail() {
 
           {/* ESERCITAZIONI */}
           {tab === 'esercitazioni' && (
-            <EsercitazioniTab corsoId={corsoId} classeId={classeId} studentiCount={studenti.length} />
+            <EsercitazioniTab corsoId={corsoId} classeId={classeId} studentiCount={studenti.length} initialOpenId={urlOpenId} initialOpenType={urlOpenType} />
           )}
         </div>
 

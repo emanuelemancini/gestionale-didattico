@@ -9,7 +9,7 @@ import Modal from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
-import { Search, BookOpen, ChevronRight, ChevronDown, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList, FileText, CheckSquare, ExternalLink, Check } from 'lucide-react';
+import { Search, BookOpen, ChevronRight, ChevronDown, GraduationCap, FolderUp, Camera, Download, User, Trash2, Edit2, CalendarDays, Clock, ClipboardList, FileText, CheckSquare, ExternalLink, Check, X } from 'lucide-react';
 import LessonModal from '../../components/ui/LessonModal';
 import EsercitazioniTab from './tabs/EsercitazioniTab';
 import { format, parseISO } from 'date-fns';
@@ -242,11 +242,24 @@ function ProgrammaPerCorso({ corsoId, classeId, nomeCorso, color, user, corsoSlu
 
 function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filterDateTo, studentiCount }) {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState({ esercitazioni: [], consegne: [], prove: [] });
+  const [consegneStats, setConsegneStats] = useState({}); // { [itemId]: { consegnati, total } }
   const [loading, setLoading] = useState(true);
-  const [expandedEserc, setExpandedEserc] = useState(false);
-  const [expandedConsegne, setExpandedConsegne] = useState(false);
-  const [expandedProve, setExpandedProve] = useState(false);
+  const totStudenti = studentiCount || 0;
+  const isDesktop = window.innerWidth > 700;
+  const [expandedEserc, setExpandedEserc] = useState(isDesktop);
+  const [expandedConsegne, setExpandedConsegne] = useState(isDesktop);
+  const [expandedProve, setExpandedProve] = useState(isDesktop);
+
+  // Pannello read-only
+  const [openPanel, setOpenPanel] = useState(null); // { id, type, corsoId, corsoSlug, titolo }
+  const autoOpenedRef = useRef(false);
+  const [panelStudenti, setPanelStudenti] = useState([]);
+  const [panelConsegne, setPanelConsegne] = useState({});
+  const [panelVoti, setPanelVoti] = useState({});
+  const [panelLodi, setPanelLodi] = useState({});
+  const [loadingPanel, setLoadingPanel] = useState(false);
 
   useEffect(() => {
     if (!user || !classeId || corsi.length === 0) return;
@@ -263,16 +276,82 @@ function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filter
         consegne: ciSnap.docs.map(d => ({ id: d.id, ...d.data(), ...tag })),
         prove: pSnap.docs.map(d => ({ id: d.id, ...d.data(), ...tag })),
       };
-    })).then(results => {
+    })).then(async results => {
       const toStr = (v) => !v ? '' : (typeof v === 'string' ? v : (v.toDate ? v.toDate().toISOString() : String(v)));
       const sortByDate = (arr, key) => [...arr].sort((a, b) => toStr(a[key]).localeCompare(toStr(b[key])));
-      setItems({
-        esercitazioni: sortByDate(results.flatMap(r => r.esercitazioni), 'data_scadenza'),
-        consegne: sortByDate(results.flatMap(r => r.consegne), 'data_scadenza'),
-        prove: sortByDate(results.flatMap(r => r.prove), 'data'),
-      });
+      const allEserc = sortByDate(results.flatMap(r => r.esercitazioni), 'data_scadenza');
+      const allConsegne = sortByDate(results.flatMap(r => r.consegne), 'data_scadenza');
+      const allProve = sortByDate(results.flatMap(r => r.prove), 'data');
+      setItems({ esercitazioni: allEserc, consegne: allConsegne, prove: allProve });
+
+      // Carica stats consegne per esercitazioni e consegne
+      const statsMap = {};
+      await Promise.all([...allEserc, ...allConsegne].map(async item => {
+        const path = item.corsoId
+          ? (allEserc.find(e => e.id === item.id && e.corsoId === item.corsoId)
+              ? collection(db, 'users', user.uid, 'corsi', item.corsoId, 'classi', classeId, 'esercitazioni', item.id, 'consegne')
+              : collection(db, 'users', user.uid, 'corsi', item.corsoId, 'classi', classeId, 'consegne', item.id, 'consegne'))
+          : null;
+        if (!path) return;
+        const snap = await getDocs(path);
+        const consegnati = snap.docs.filter(d => ['consegnato','ritardo'].includes(d.data().consegnaStato)).length;
+        statsMap[`${item.corsoId}-${item.id}`] = { consegnati, total: studentiCount };
+      }));
+      setConsegneStats(statsMap);
     }).finally(() => setLoading(false));
   }, [user, classeId, corsi]);
+
+  // Auto-apertura panel da URL (es. dopo navigazione "indietro")
+  useEffect(() => {
+    if (loading || autoOpenedRef.current) return;
+    const urlPanelId = searchParams.get('panelId');
+    const urlPanelType = searchParams.get('panelType');
+    if (!urlPanelId || !urlPanelType) return;
+    const allItems = [...items.esercitazioni, ...items.consegne, ...items.prove];
+    const item = allItems.find(i => i.id === urlPanelId);
+    if (!item) return;
+    autoOpenedRef.current = true;
+    // Espandi la sezione corrispondente
+    if (urlPanelType === 'eserc') setExpandedEserc(true);
+    if (urlPanelType === 'consegna') setExpandedConsegne(true);
+    if (urlPanelType === 'prova') setExpandedProve(true);
+    handleOpenPanel(item, urlPanelType);
+  }, [loading, items]);
+
+  const handleOpenPanel = async (item, type) => {
+    if (openPanel?.id === item.id) {
+      setOpenPanel(null);
+      setSearchParams(p => { const n = new URLSearchParams(p); n.delete('panelId'); n.delete('panelType'); return n; });
+      return;
+    }
+    setSearchParams(p => { const n = new URLSearchParams(p); n.set('panelId', item.id); n.set('panelType', type); return n; });
+    setOpenPanel({ id: item.id, type, corsoId: item.corsoId, corsoSlug: item.corsoSlug, titolo: item.titolo });
+    setLoadingPanel(true);
+    try {
+      const studSnap = await getDocs(collection(db, 'users', user.uid, 'classi', classeId, 'studenti'));
+      const studList = studSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.cognome || '').localeCompare(b.cognome || '') || (a.nome || '').localeCompare(b.nome || ''));
+      setPanelStudenti(studList);
+
+      if (type === 'prova') {
+        const provaSnap = await getDoc(doc(db, 'users', user.uid, 'corsi', item.corsoId, 'classi', classeId, 'prove', item.id));
+        const d = provaSnap.data() || {};
+        setPanelVoti(d.voti || {});
+        setPanelLodi(d.lodi || {});
+        setPanelConsegne({});
+      } else {
+        const subPath = type === 'eserc'
+          ? collection(db, 'users', user.uid, 'corsi', item.corsoId, 'classi', classeId, 'esercitazioni', item.id, 'consegne')
+          : collection(db, 'users', user.uid, 'corsi', item.corsoId, 'classi', classeId, 'consegne', item.id, 'consegne');
+        const cSnap = await getDocs(subPath);
+        const cMap = {};
+        cSnap.docs.forEach(d => { cMap[d.id] = d.data(); });
+        setPanelConsegne(cMap);
+        setPanelVoti({});
+        setPanelLodi({});
+      }
+    } finally { setLoadingPanel(false); }
+  };
 
   const inRange = (dateStr) => {
     if (!dateStr) return true;
@@ -312,14 +391,141 @@ function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filter
     );
   };
 
-  const LinkGestisci = ({ item, tab }) => (
-    item.corsoSlug ? (
-      <Link to={`/corsi/${item.corsoSlug}/classi/${classeSlug}?tab=${tab}`}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', padding: '6px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none', border: '1px solid var(--border)', background: 'var(--surface-el)' }}>
-        <ClipboardList size={14} /> Gestisci Voti
-      </Link>
-    ) : null
-  );
+  const BtnVoti = ({ item, openType, accentBg, accentBorder, accentText }) => {
+    const isOpen = openPanel?.id === item.id;
+    return (
+      <button
+        onClick={() => handleOpenPanel(item, openType)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
+          padding: '6px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          background: isOpen ? accentBg : accentBorder,
+          color: isOpen ? accentText : accentText,
+          border: `1px solid ${accentBorder}`,
+        }}
+      >
+        <ClipboardList size={14} /> {isOpen ? 'Chiudi' : 'Vedi Voti'}
+      </button>
+    );
+  };
+
+  // Pannello read-only inline — stesso stile di EsercitazioniTab
+  const ReadOnlyPanel = ({ item, accentBorder, accentBg, accentText, openType }) => {
+    const isOpen = openPanel?.id === item.id;
+    const innerRef = useRef(null);
+    const [height, setHeight] = useState(0);
+
+    useEffect(() => {
+      if (!innerRef.current) return;
+      if (isOpen) {
+        setHeight(innerRef.current.scrollHeight + 4);
+      } else {
+        // Fissa l'altezza corrente nel DOM, poi nel frame successivo animala a 0
+        setHeight(innerRef.current.scrollHeight + 4);
+        const raf = requestAnimationFrame(() => setHeight(0));
+        return () => cancelAnimationFrame(raf);
+      }
+    }, [isOpen, panelStudenti, loadingPanel]);
+
+    const isProva = openType === 'prova';
+    const consegnati = Object.values(panelConsegne).filter(c => c.consegnaStato === 'consegnato' || c.consegnaStato === 'ritardo').length;
+    const inRitardo  = Object.values(panelConsegne).filter(c => c.consegnaStato === 'ritardo').length;
+    const votiCount  = isProva
+      ? Object.keys(panelVoti).length
+      : Object.values(panelConsegne).filter(c => c.voto !== null && c.voto !== undefined).length;
+
+    return (
+      <div style={{
+        margin: '0 20px',
+        overflow: 'hidden',
+        height: height,
+        opacity: isOpen ? 1 : 0,
+        transition: isOpen
+          ? 'height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease'
+          : 'height 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease 0.05s',
+      }}>
+      <div ref={innerRef} style={{ border: `1px solid ${accentBorder}`, borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'var(--surface)' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: `1px solid ${accentBorder}`, background: accentBg }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: accentText }}>{item.titolo}</div>
+            <div style={{ fontSize: 12, marginTop: 2, color: accentText, opacity: 0.8 }}>
+              {isProva
+                ? `${votiCount} voti inseriti`
+                : `${consegnati} consegnati · ${inRitardo} in ritardo · ${votiCount} voti inseriti`}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {item.corsoSlug && (
+              <Link
+                to={`/corsi/${item.corsoSlug}/classi/${classeSlug}?tab=esercitazioni&openId=${item.id}&openType=${openType}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: accentText, textDecoration: 'none', padding: '5px 12px', borderRadius: 6, border: `1px solid ${accentBorder}`, background: accentBorder }}
+              >
+                <Edit2 size={12} /> Modifica votazioni
+              </Link>
+            )}
+            <button onClick={() => setOpenPanel(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: accentText, display: 'flex', padding: 4, borderRadius: 6 }}>
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {loadingPanel ? (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[...Array(3)].map((_, i) => <div key={i} className="skeleton" style={{ height: 40, borderRadius: 8 }} />)}
+          </div>
+        ) : panelStudenti.length === 0 ? (
+          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>Nessuno studente.</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-el)' }}>
+                <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)' }}>Studente</th>
+                {!isProva && <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 130 }}>Consegna</th>}
+                <th style={{ textAlign: 'center', padding: '8px 20px', fontWeight: 700, fontSize: 13, color: 'var(--text-2)', width: 80 }}>Voto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {panelStudenti.map((s, idx) => {
+                const c = panelConsegne[s.id] || {};
+                const voto = isProva ? panelVoti[s.id] : c.voto;
+                const lode = isProva ? panelLodi[s.id] : c.lode;
+                const haVoto = voto !== null && voto !== undefined;
+                const STATI = {
+                  null:       { label: 'Da consegnare', color: 'var(--text-3)',  bg: 'var(--surface-el)', border: 'var(--border)' },
+                  consegnato: { label: 'Consegnato',    color: '#16a34a',        bg: 'rgba(22,163,74,0.12)', border: '#16a34a' },
+                  ritardo:    { label: 'In ritardo',    color: '#ef4444',        bg: 'rgba(239,68,68,0.12)', border: '#ef4444' },
+                };
+                const cfg = STATI[c.consegnaStato ?? null] || STATI[null];
+                return (
+                  <tr key={s.id} style={{ borderBottom: idx < panelStudenti.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-el)' }}>
+                    <td style={{ padding: '8px 14px', fontWeight: 500 }}>{s.cognome} {s.nome}</td>
+                    {!isProva && (
+                      <td style={{ textAlign: 'center', padding: '8px 10px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, border: `1px solid ${cfg.border}`, background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap', width: 120 }}>
+                          {cfg.label}
+                        </span>
+                      </td>
+                    )}
+                    <td style={{ textAlign: 'center', padding: '8px 10px' }}>
+                      <span style={{ display: 'inline-block', minWidth: 34, padding: '2px 6px', borderRadius: 6, fontSize: 13, fontWeight: 700,
+                        color: haVoto ? (Number(voto) >= 27 ? '#16a34a' : Number(voto) >= 24 ? '#f97316' : Number(voto) >= 18 ? '#eab308' : '#ef4444') : 'var(--text-3)',
+                        background: haVoto ? (Number(voto) >= 27 ? 'rgba(22,163,74,0.1)' : Number(voto) >= 24 ? 'rgba(249,115,22,0.1)' : Number(voto) >= 18 ? 'rgba(234,179,8,0.1)' : 'rgba(239,68,68,0.1)') : 'transparent',
+                      }}>
+                        {haVoto ? `${voto}${lode ? 'L' : ''}` : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      </div>
+    );
+  };
 
   const SectionHeader = ({ label, count, bg, border, textColor, expanded, onToggle }) => (
     <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: bg, border: `1px solid ${border}` }} onClick={onToggle}>
@@ -332,81 +538,122 @@ function ElaboratiAllCorsi({ corsi, classeId, classeSlug, filterDateFrom, filter
   if (loading) return <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)' }}>Caricamento...</div>;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
-      {/* Colonna sinistra: Esercitazioni + Consegne */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20, alignItems: 'start' }}>
+      {/* Colonna Esercitazioni */}
       <div>
-        <SectionHeader label="Esercitazioni" count={eserc.length} bg="#dbeafe" border="#93c5fd" textColor="#1e3a8a" expanded={expandedEserc} onToggle={() => setExpandedEserc(v => !v)} />
+        <SectionHeader label="Esercitazioni" count={eserc.length} bg="color-mix(in srgb, var(--accent) 12%, transparent)" border="color-mix(in srgb, var(--accent) 25%, transparent)" textColor="var(--accent)" expanded={expandedEserc} onToggle={() => setExpandedEserc(v => !v)} />
         {expandedEserc && (
           eserc.length === 0
             ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna esercitazione</div></div>
-            : <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 8 }}>
-                {eserc.map(es => (
-                  <div key={`${es.corsoId}-${es.id}`} className="card" style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{es.titolo}</h3>
-                      <CorsoChip item={es} />
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {eserc.map(es => {
+                  const stats = consegneStats[`${es.corsoId}-${es.id}`] || { consegnati: 0, total: 0 };
+                  const prog = stats.total > 0 ? Math.round((stats.consegnati / stats.total) * 100) : 0;
+                  return (
+                  <div key={`${es.corsoId}-${es.id}`}>
+                    <div className="card" style={{ display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)', borderRadius: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{es.titolo}</h3>
+                          <ScadenzaRow item={es} dateKey="data_scadenza" />
+                          <div style={{ marginBottom: 8 }}><span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>Esercitazione</span></div>
+                        </div>
+                        <CorsoChip item={es} />
+                      </div>
+                      <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{es.descrizione || 'Nessuna descrizione'}</p>
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+                          <span style={{ color: 'var(--text-2)' }}>Consegnato</span>
+                          <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
+                        </div>
+                        <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
+                          <div style={{ height: '100%', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', width: `${prog}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                      <BtnVoti item={es} openType="eserc" accentBg="color-mix(in srgb, var(--accent) 12%, transparent)" accentBorder="color-mix(in srgb, var(--accent) 25%, transparent)" accentText="var(--accent)" />
                     </div>
-                    <ScadenzaRow item={es} dateKey="data_scadenza" />
-                    {es.descrizione && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{es.descrizione}</p>}
-                    <LinkGestisci item={es} tab="esercitazioni" />
+                    <ReadOnlyPanel item={es} openType="eserc" accentBorder="color-mix(in srgb, var(--accent) 25%, transparent)" accentBg="color-mix(in srgb, var(--accent) 12%, transparent)" accentText="var(--accent)" />
                   </div>
-                ))}
+                )})}
               </div>
         )}
-
-        <div style={{ marginTop: expandedEserc ? 16 : 0 }}>
-          <SectionHeader label="Consegne" count={consegne.length} bg="#ffedd5" border="#fdba74" textColor="#7c2d12" expanded={expandedConsegne} onToggle={() => setExpandedConsegne(v => !v)} />
-          {expandedConsegne && (
-            consegne.length === 0
-              ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna consegna</div></div>
-              : <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {consegne.map(ci => (
-                    <div key={`${ci.corsoId}-${ci.id}`} className="card" style={{ background: '#fff7ed', border: '1px solid #ffedd5' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{ci.titolo}</h3>
-                        <CorsoChip item={ci} />
-                      </div>
-                      <ScadenzaRow item={ci} dateKey="data_scadenza" />
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                        {(ci.modalita || []).map(m => (
-                          <span key={m} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' }}>
-                            {MODALITA_CONSEGNA.find(x => x.value === m)?.label || m}
-                          </span>
-                        ))}
-                      </div>
-                      {ci.descrizione && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ci.descrizione}</p>}
-                      <LinkGestisci item={ci} tab="esercitazioni" />
-                    </div>
-                  ))}
-                </div>
-          )}
-        </div>
       </div>
 
-      {/* Colonna destra: Prove */}
+      {/* Colonna Consegne */}
       <div>
-        <SectionHeader label="Prove" count={prove.length} bg="#fee2e2" border="#fca5a5" textColor="#7f1d1d" expanded={expandedProve} onToggle={() => setExpandedProve(v => !v)} />
+        <SectionHeader label="Consegne" count={consegne.length} bg="color-mix(in srgb, var(--accent) 12%, transparent)" border="color-mix(in srgb, var(--accent) 25%, transparent)" textColor="var(--accent)" expanded={expandedConsegne} onToggle={() => setExpandedConsegne(v => !v)} />
+        {expandedConsegne && (
+          consegne.length === 0
+            ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna consegna</div></div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {consegne.map(ci => {
+                  const stats = consegneStats[`${ci.corsoId}-${ci.id}`] || { consegnati: 0, total: 0 };
+                  const prog = stats.total > 0 ? Math.round((stats.consegnati / stats.total) * 100) : 0;
+                  return (
+                  <div key={`${ci.corsoId}-${ci.id}`}>
+                    <div className="card" style={{ display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)', borderRadius: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{ci.titolo}</h3>
+                          <ScadenzaRow item={ci} dateKey="data_scadenza" />
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                            {(ci.modalita || []).map(m => (
+                              <span key={m} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
+                                {MODALITA_CONSEGNA.find(x => x.value === m)?.label || m}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <CorsoChip item={ci} />
+                      </div>
+                      <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ci.descrizione || 'Nessuna descrizione'}</p>
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+                          <span style={{ color: 'var(--text-2)' }}>Consegnato</span>
+                          <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
+                        </div>
+                        <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
+                          <div style={{ height: '100%', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', width: `${prog}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                      <BtnVoti item={ci} openType="consegna" accentBg="color-mix(in srgb, var(--accent) 12%, transparent)" accentBorder="color-mix(in srgb, var(--accent) 25%, transparent)" accentText="var(--accent)" />
+                    </div>
+                    <ReadOnlyPanel item={ci} openType="consegna" accentBorder="color-mix(in srgb, var(--accent) 25%, transparent)" accentBg="color-mix(in srgb, var(--accent) 12%, transparent)" accentText="var(--accent)" />
+                  </div>
+                )})}
+              </div>
+        )}
+      </div>
+
+      {/* Colonna Prove */}
+      <div>
+        <SectionHeader label="Prove" count={prove.length} bg="color-mix(in srgb, var(--accent) 12%, transparent)" border="color-mix(in srgb, var(--accent) 25%, transparent)" textColor="var(--accent)" expanded={expandedProve} onToggle={() => setExpandedProve(v => !v)} />
         {expandedProve && (
           prove.length === 0
             ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-state-title" style={{ fontSize: 14 }}>Nessuna prova</div></div>
             : <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {prove.map(p => (
-                  <div key={`${p.corsoId}-${p.id}`} className="card" style={{ background: '#fff5f5', border: '1px solid #fee2e2' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{p.titolo}</h3>
-                      <CorsoChip item={p} />
+                  <div key={`${p.corsoId}-${p.id}`}>
+                    <div className="card" style={{ display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)', borderRadius: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{p.titolo}</h3>
+                          <ScadenzaRow item={p} dateKey="data" />
+                          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
+                              {TIPI_PROVA.find(t => t.value === p.tipo)?.label || p.tipo}
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
+                              {MODALITA.find(m => m.value === p.modalita)?.label || p.modalita}
+                            </span>
+                          </div>
+                        </div>
+                        <CorsoChip item={p} />
+                      </div>
+                      <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 14, flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.descrizione || 'Nessuna descrizione'}</p>
+                      <BtnVoti item={p} openType="prova" accentBg="color-mix(in srgb, var(--accent) 12%, transparent)" accentBorder="color-mix(in srgb, var(--accent) 25%, transparent)" accentText="var(--accent)" />
                     </div>
-                    <ScadenzaRow item={p} dateKey="data" />
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
-                        {TIPI_PROVA.find(t => t.value === p.tipo)?.label || p.tipo}
-                      </span>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
-                        {MODALITA.find(m => m.value === p.modalita)?.label || p.modalita}
-                      </span>
-                    </div>
-                    {p.descrizione && <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.descrizione}</p>}
-                    <LinkGestisci item={p} tab="esercitazioni" />
+                    <ReadOnlyPanel item={p} openType="prova" accentBorder="color-mix(in srgb, var(--accent) 25%, transparent)" accentBg="color-mix(in srgb, var(--accent) 12%, transparent)" accentText="var(--accent)" />
                   </div>
                 ))}
               </div>
@@ -997,7 +1244,7 @@ export default function ClasseOverview() {
                           <div style={{
                             flexShrink: 0, width: 52, textAlign: 'center',
                             background: past ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface-el)',
-                            border: `1px solid ${past ? 'color-mix(in srgb, var(--accent) 30%, transparent)' : 'var(--border)'}`,
+                            border: `1px solid ${past ? 'color-mix(in srgb, var(--accent) 25%, transparent)' : 'var(--border)'}`,
                             borderRadius: 10, padding: '6px 0',
                           }}>
                             <div style={{ fontSize: 10, fontWeight: 700, color: past ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.05em' }}>{giornoSett}</div>

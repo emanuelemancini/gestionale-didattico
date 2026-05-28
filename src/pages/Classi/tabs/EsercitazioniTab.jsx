@@ -48,7 +48,7 @@ function votoBg(v) {
   return 'rgba(239,68,68,0.1)';
 }
 
-export default function EsercitazioniTab({ corsoId, classeId, studentiCount, filterDateFrom = '', filterDateTo = '' }) {
+export default function EsercitazioniTab({ corsoId, classeId, studentiCount, filterDateFrom = '', filterDateTo = '', initialOpenId = null, initialOpenType = null }) {
   const { user } = useAuth();
   const toast = useToast();
 
@@ -70,9 +70,10 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
   const [savingProva, setSavingProva] = useState(false);
 
   // espansione sezioni
-  const [expandedEserc, setExpandedEserc] = useState(false);
-  const [expandedConsegne, setExpandedConsegne] = useState(false);
-  const [expandedProve, setExpandedProve] = useState(false);
+  const isDesktop = window.innerWidth > 700;
+  const [expandedEserc, setExpandedEserc] = useState(isDesktop);
+  const [expandedConsegne, setExpandedConsegne] = useState(isDesktop);
+  const [expandedProve, setExpandedProve] = useState(isDesktop);
 
   // consegne items (nuova sezione)
   const [consegneItems, setConsegneItems] = useState([]);
@@ -156,6 +157,21 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
   }, [selectedConsegnaId]);
 
   useEffect(() => { loadData(); }, [corsoId, classeId, user]);
+
+  // Auto-apri pannello se arrivato da link esterno (solo una volta dopo il caricamento)
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!initialOpenId || !initialOpenType || loading || autoOpenedRef.current) return;
+    const exists =
+      (initialOpenType === 'eserc'    && esercitazioni.some(e => e.id === initialOpenId)) ||
+      (initialOpenType === 'consegna' && consegneItems.some(c => c.id === initialOpenId)) ||
+      (initialOpenType === 'prova'    && prove.some(p => p.id === initialOpenId));
+    if (!exists) return;
+    autoOpenedRef.current = true;
+    if (initialOpenType === 'eserc')    { setExpandedEserc(true);   openPanel(initialOpenId); }
+    if (initialOpenType === 'consegna') { setExpandedConsegne(true); openConsegnaItemPanel(initialOpenId); }
+    if (initialOpenType === 'prova')    { setExpandedProve(true);    openProvaPanel(initialOpenId); }
+  }, [loading, esercitazioni, consegneItems, prove]);
 
   const loadData = async () => {
     if (!user) return;
@@ -480,6 +496,27 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
 
   const selectedEs = esercitazioni.find(e => e.id === selectedEsId);
 
+  // Wrapper animato apertura/chiusura fluida
+  const SlidePanel = ({ isOpen, children }) => {
+    const innerRef = useRef(null);
+    const [height, setHeight] = useState(0);
+    useEffect(() => {
+      if (!innerRef.current) return;
+      if (isOpen) {
+        setHeight(innerRef.current.scrollHeight + 4);
+      } else {
+        setHeight(innerRef.current.scrollHeight + 4);
+        const raf = requestAnimationFrame(() => setHeight(0));
+        return () => cancelAnimationFrame(raf);
+      }
+    }, [isOpen]);
+    return (
+      <div style={{ overflow: 'hidden', height, opacity: isOpen ? 1 : 0, transition: isOpen ? 'height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease' : 'height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease 0.05s' }}>
+        <div ref={innerRef}>{children}</div>
+      </div>
+    );
+  };
+
   return (
     <>
       {loading && (
@@ -489,15 +526,15 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
       )}
 
       {!loading && <>
-        <div className="esercitazioni-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
+        <div className="esercitazioni-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20, alignItems: 'start' }}>
 
           {/* ── Colonna Esercitazioni ── */}
           <div>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: '#dbeafe', border: '1px solid #93c5fd' }} onClick={() => setExpandedEserc(v => !v)}>
-              <span style={{ color: '#93c5fd', display: 'flex', marginRight: 8 }}>{expandedEserc ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1e3a8a' }}>Esercitazioni</span>
-              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: '#93c5fd', color: '#1e3a8a', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{esercitazioni.length}</span>
-              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#93c5fd', color: '#1e3a8a', border: 'none' }} onClick={e => { e.stopPropagation(); openCreate(); }}>+ Nuova Esercitazione</button>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }} onClick={() => setExpandedEserc(v => !v)}>
+              <span style={{ color: 'color-mix(in srgb, var(--accent) 25%, transparent)', display: 'flex', marginRight: 8 }}>{expandedEserc ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)' }}>Esercitazioni</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{esercitazioni.length}</span>
+              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', border: 'none' }} onClick={e => { e.stopPropagation(); openCreate(); }}>+ Nuova Esercitazione</button>
             </div>
             {!expandedEserc ? null : esercitazioni.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
@@ -520,7 +557,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
 
               return (
                 <div key={es.id} ref={el => cardRefs.current[es.id] = el}>
-                  <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: '#eff6ff', border: '1px solid #dbeafe' }}>
+                  <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                       <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{es.titolo}</h3>
@@ -536,11 +573,11 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                           </div>
                         )}
                         <div style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#dbeafe', color: '#1e3a8a', border: '1px solid #93c5fd' }}>Esercitazione</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>Esercitazione</span>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                        <button className="icon-btn" style={{ width: 30, height: 30, color: '#1e3a8a', background: '#dbeafe', border: '1px solid #93c5fd' }} onClick={() => openEdit(es)}><Edit2 size={15} /></button>
+                        <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }} onClick={() => openEdit(es)}><Edit2 size={15} /></button>
                         <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteTarget(es)}><Trash2 size={15} /></button>
                       </div>
                     </div>
@@ -555,32 +592,32 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                         <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
                       </div>
                       <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
-                        <div style={{ height: '100%', background: '#93c5fd', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                        <div style={{ height: '100%', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
                       </div>
                     </div>
 
                     <button
                       onClick={() => openPanel(es.id)}
                       className='btn btn-sm'
-                      style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isSelected ? { background: '#dbeafe', color: '#1e3a8a', border: '1px solid #93c5fd' } : { background: '#93c5fd', color: '#1e3a8a', border: 'none' }) }}
+                      style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isSelected ? { background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' } : { background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', border: 'none' }) }}
                     >
                       {isSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
                     </button>
                   </div>
 
                   {/* Pannello inline */}
-                  {isSelected && (
-                    <div ref={panelRef} style={{ border: '1px solid #93c5fd', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)', margin: '0 20px' }}>
+                  <SlidePanel isOpen={isSelected}>
+                    <div ref={panelRef} style={{ border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'var(--surface)', margin: '0 20px' }}>
                       {/* Header */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #93c5fd', background: '#dbeafe' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 16, color: '#1e3a8a' }}>{es.titolo}</div>
-                          <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 2 }}>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--accent)' }}>{es.titolo}</div>
+                          <div style={{ fontSize: 12, color: '#0f766e', marginTop: 2 }}>
                             {Object.values(consegne).filter(c => c.consegnaStato === 'consegnato').length} consegnati · {Object.values(consegne).filter(c => c.consegnaStato === 'ritardo').length} in ritardo · {Object.values(consegne).filter(c => c.voto !== null && c.voto !== undefined).length} voti inseriti
                           </div>
                         </div>
                         <button onClick={() => { setSelectedEsId(null); setEditingCell(null); }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e3a8a', display: 'flex', padding: 4, borderRadius: 6 }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4, borderRadius: 6 }}
                         >
                           <X size={15} />
                         </button>
@@ -662,19 +699,21 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                         </table>
                       )}
                     </div>
-                  )}
+                  </SlidePanel>
                 </div>
               );
             })}
           </div>
             )}
-          {/* ── Consegne (sotto esercitazioni) ── */}
-          <div style={{ marginTop: 24 }}>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: '#ffedd5', border: '1px solid #fdba74' }} onClick={() => setExpandedConsegne(v => !v)}>
-              <span style={{ color: '#fdba74', display: 'flex', marginRight: 8 }}>{expandedConsegne ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#7c2d12' }}>Consegne</span>
-              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: '#fdba74', color: '#7c2d12', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{consegneItems.length}</span>
-              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#fdba74', color: '#7c2d12', border: 'none' }} onClick={e => { e.stopPropagation(); openCreateConsegnaItem(); }}>+ Nuova Consegna</button>
+          </div>
+
+          {/* ── Colonna Consegne ── */}
+          <div>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }} onClick={() => setExpandedConsegne(v => !v)}>
+              <span style={{ color: 'color-mix(in srgb, var(--accent) 25%, transparent)', display: 'flex', marginRight: 8 }}>{expandedConsegne ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)' }}>Consegne</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{consegneItems.length}</span>
+              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', border: 'none' }} onClick={e => { e.stopPropagation(); openCreateConsegnaItem(); }}>+ Nuova Consegna</button>
             </div>
             {!expandedConsegne ? null : consegneItems.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
@@ -696,7 +735,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                   const isSelected = ci.id === selectedConsegnaId;
                   return (
                     <div key={ci.id} ref={el => consegnaItemCardRefs.current[ci.id] = el}>
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: '#fff7ed', border: '1px solid #ffedd5' }}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isSelected ? '14px 14px 0 0' : 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                           <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{ci.titolo}</h3>
@@ -712,16 +751,16 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                               </div>
                             )}
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' }}>Consegna</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>Consegna</span>
                               {(ci.modalita || []).map(m => (
-                                <span key={m} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' }}>
+                                <span key={m} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
                                   {MODALITA_CONSEGNA.find(x => x.value === m)?.label || m}
                                 </span>
                               ))}
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            <button className="icon-btn" style={{ width: 30, height: 30, color: '#7c2d12', background: '#ffedd5', border: '1px solid #fdba74' }} onClick={() => openEditConsegnaItem(ci)}><Edit2 size={15} /></button>
+                            <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }} onClick={() => openEditConsegnaItem(ci)}><Edit2 size={15} /></button>
                             <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteConsegnaItemTarget(ci)}><Trash2 size={15} /></button>
                           </div>
                         </div>
@@ -734,30 +773,30 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                             <span style={{ fontWeight: 600 }}>{stats.consegnati} / {stats.total}</span>
                           </div>
                           <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
-                            <div style={{ height: '100%', background: '#fdba74', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                            <div style={{ height: '100%', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', width: `${progConsegne}%`, borderRadius: 20, transition: 'width 0.3s' }} />
                           </div>
                         </div>
                         <button
                           onClick={() => openConsegnaItemPanel(ci.id)}
                           className='btn btn-sm'
-                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isSelected ? { background: '#ffedd5', color: '#7c2d12', border: '1px solid #fdba74' } : { background: '#fdba74', color: '#7c2d12', border: 'none' }) }}
+                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isSelected ? { background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' } : { background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', border: 'none' }) }}
                         >
                           {isSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
                         </button>
                       </div>
 
                       {/* Pannello inline consegna */}
-                      {isSelected && (
-                        <div style={{ border: '1px solid #fdba74', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)', margin: '0 20px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #fdba74', background: '#ffedd5' }}>
+                      <SlidePanel isOpen={isSelected}>
+                        <div style={{ border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'var(--surface)', margin: '0 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 16, color: '#7c2d12' }}>{ci.titolo}</div>
+                              <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--accent)' }}>{ci.titolo}</div>
                               <div style={{ fontSize: 12, color: '#f97316', marginTop: 2 }}>
                                 {Object.values(consegne).filter(c => c.consegnaStato === 'consegnato').length} consegnati · {Object.values(consegne).filter(c => c.consegnaStato === 'ritardo').length} in ritardo · {Object.values(consegne).filter(c => c.voto !== null && c.voto !== undefined).length} voti inseriti
                               </div>
                             </div>
                             <button onClick={() => { setSelectedConsegnaId(null); setEditingCell(null); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c2d12', display: 'flex', padding: 4, borderRadius: 6 }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4, borderRadius: 6 }}
                             >
                               <X size={15} />
                             </button>
@@ -825,22 +864,21 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                             </table>
                           )}
                         </div>
-                      )}
+                      </SlidePanel>
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
-          </div>
 
           {/* ── Colonna Prove ── */}
           <div>
-            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: '#fee2e2', border: '1px solid #fca5a5' }} onClick={() => setExpandedProve(v => !v)}>
-              <span style={{ color: '#fca5a5', display: 'flex', marginRight: 8 }}>{expandedProve ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#7f1d1d' }}>Prove</span>
-              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: '#fca5a5', color: '#7f1d1d', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{prove.length}</span>
-              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: '#fca5a5', color: '#7f1d1d', border: 'none' }} onClick={e => { e.stopPropagation(); setEditProva(null); setProvaForm({ titolo: '', descrizione: '', tipo: 'midtest', modalita: 'scritto', data: new Date().toISOString().slice(0,10) }); setShowProvaModal(true); }}>+ Nuova Prova</button>
+            <div className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', marginBottom: 12, cursor: 'pointer', userSelect: 'none', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }} onClick={() => setExpandedProve(v => !v)}>
+              <span style={{ color: 'color-mix(in srgb, var(--accent) 25%, transparent)', display: 'flex', marginRight: 8 }}>{expandedProve ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+              <span style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)' }}>Prove</span>
+              <span style={{ marginLeft: 8, minWidth: 22, height: 22, borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{prove.length}</span>
+              <button className="btn btn-sm" style={{ marginLeft: 'auto', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', border: 'none' }} onClick={e => { e.stopPropagation(); setEditProva(null); setProvaForm({ titolo: '', descrizione: '', tipo: 'midtest', modalita: 'scritto', data: new Date().toISOString().slice(0,10) }); setShowProvaModal(true); }}>+ Nuova Prova</button>
             </div>
             {!expandedProve ? null : prove.length === 0 ? (
               <div className="empty-state" style={{ padding: 32 }}>
@@ -855,7 +893,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                   const isProvaSelected = p.id === selectedProvaId;
                   return (
                     <div key={p.id} ref={el => provaCardRefs.current[p.id] = el}>
-                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isProvaSelected ? '14px 14px 0 0' : 14, background: '#fff5f5', border: '1px solid #fee2e2' }}>
+                      <div className="card" style={{ display: 'flex', flexDirection: 'column', borderRadius: isProvaSelected ? '14px 14px 0 0' : 14, background: 'color-mix(in srgb, var(--accent) 5%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                           <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                             <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{p.titolo}</h3>
@@ -875,16 +913,16 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                               );
                             })()}
                             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
                                 {TIPI_PROVA.find(t => t.value === p.tipo)?.label || p.tipo}
                               </span>
-                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }}>
                                 {MODALITA.find(m => m.value === p.modalita)?.label || p.modalita}
                               </span>
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            <button className="icon-btn" style={{ width: 30, height: 30, color: '#7f1d1d', background: '#fee2e2', border: '1px solid #fca5a5' }} onClick={() => { setEditProva(p); setProvaForm({ titolo: p.titolo, descrizione: p.descrizione || '', tipo: p.tipo, modalita: p.modalita, data: p.data || '' }); setShowProvaModal(true); }}><Edit2 size={15} /></button>
+                            <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' }} onClick={() => { setEditProva(p); setProvaForm({ titolo: p.titolo, descrizione: p.descrizione || '', tipo: p.tipo, modalita: p.modalita, data: p.data || '' }); setShowProvaModal(true); }}><Edit2 size={15} /></button>
                             <button className="icon-btn" style={{ width: 30, height: 30, color: 'var(--danger)' }} onClick={() => setDeleteProvaTarget(p)}><Trash2 size={15} /></button>
                           </div>
                         </div>
@@ -899,31 +937,31 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                             <span style={{ fontWeight: 600 }}>{votiCount} / {studentiCount}</span>
                           </div>
                           <div style={{ background: '#fff', borderRadius: 20, height: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}>
-                            <div style={{ height: '100%', background: '#fca5a5', width: `${progVoti}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                            <div style={{ height: '100%', background: 'color-mix(in srgb, var(--accent) 25%, transparent)', width: `${progVoti}%`, borderRadius: 20, transition: 'width 0.3s' }} />
                           </div>
                         </div>
 
                         <button
                           onClick={() => openProvaPanel(p.id)}
                           className='btn btn-sm'
-                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isProvaSelected ? { background: '#fee2e2', color: '#7f1d1d', border: '1px solid #fca5a5' } : { background: '#fca5a5', color: '#7f1d1d', border: 'none' }) }}
+                          style={{ justifyContent: 'center', display: 'flex', gap: 8, alignItems: 'center', ...(isProvaSelected ? { background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)' } : { background: 'color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent)', border: 'none' }) }}
                         >
                           {isProvaSelected ? <><ChevronUp size={16} /> Chiudi</> : <><ClipboardList size={16} /> Gestisci Voti</>}
                         </button>
                       </div>
 
                       {/* Pannello inline prova */}
-                      {isProvaSelected && (
-                        <div style={{ border: '1px solid #fca5a5', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', animation: 'slideDown 0.2s ease', background: 'var(--surface)', margin: '0 20px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #fca5a5', background: '#fee2e2' }}>
+                      <SlidePanel isOpen={isProvaSelected}>
+                        <div style={{ border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', borderTop: 'none', borderRadius: '0 0 14px 14px', overflow: 'hidden', background: 'var(--surface)', margin: '0 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 16, color: '#7f1d1d' }}>{p.titolo}</div>
+                              <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--accent)' }}>{p.titolo}</div>
                               <div style={{ fontSize: 12, color: '#ef4444', marginTop: 2 }}>
                                 {Object.keys(provaVoti).length} voti inseriti
                               </div>
                             </div>
                             <button onClick={() => { setSelectedProvaId(null); setEditingCell(null); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7f1d1d', display: 'flex', padding: 4, borderRadius: 6 }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', padding: 4, borderRadius: 6 }}
                             >
                               <X size={15} />
                             </button>
@@ -998,7 +1036,7 @@ export default function EsercitazioniTab({ corsoId, classeId, studentiCount, fil
                             </table>
                           )}
                         </div>
-                      )}
+                      </SlidePanel>
                     </div>
                   );
                 })}

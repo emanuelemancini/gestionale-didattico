@@ -214,37 +214,34 @@ export default function Classi() {
                   {classiGruppo.map(cl => {
                     const color = colorMap[cl.id];
                     return (
-                <div key={cl.id} className="card card-hover" style={{ position: 'relative', padding: 20 }}>
-                  {/* Header card: badge + menu */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                    <span style={{
-                      fontSize: 18, fontWeight: 800,
-                      color,
-                    }}>{cl.nome}</span>
-                    <div ref={menuOpen === cl.id ? menuRef : null} style={{ position: 'relative' }}>
-                      <button
-                        className="icon-btn"
-                        style={{ width: 28, height: 28 }}
-                        onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === cl.id ? null : cl.id); }}
-                      >
-                        <MoreVertical size={16} />
-                      </button>
-                      {menuOpen === cl.id && (
-                        <div style={{
-                          position: 'absolute', right: 0, top: 32,
-                          background: 'var(--surface-el)', border: '1px solid var(--border)',
-                          borderRadius: 8, padding: 4, minWidth: 140, zIndex: 50,
-                          boxShadow: 'var(--shadow)'
-                        }}>
-                          <div className="search-result-item" onClick={() => openEdit(cl)} style={{ gap: 8 }}><Edit2 size={14} /> Modifica</div>
-                          <div className="search-result-item" style={{ color: 'var(--danger)', gap: 8 }}
-                            onClick={() => { setDeleteTarget(cl); setMenuOpen(null); }}><Trash2 size={14} /> Elimina</div>
-                        </div>
-                      )}
+                <div key={cl.id} className="card card-hover" style={{ position: 'relative', padding: 0 }}>
+                  <Link to={`/classi/${cl.slug || cl.id}`} style={{ textDecoration: 'none', display: 'block', padding: 20 }}>
+                    {/* Header card: badge + menu */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                      <span style={{ fontSize: 18, fontWeight: 800, color }}>{cl.nome}</span>
+                      <div ref={menuOpen === cl.id ? menuRef : null} style={{ position: 'relative' }} onClick={e => e.preventDefault()}>
+                        <button
+                          className="icon-btn"
+                          style={{ width: 28, height: 28 }}
+                          onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === cl.id ? null : cl.id); }}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {menuOpen === cl.id && (
+                          <div style={{
+                            position: 'absolute', right: 0, top: 32,
+                            background: 'var(--surface-el)', border: '1px solid var(--border)',
+                            borderRadius: 8, padding: 4, minWidth: 140, zIndex: 50,
+                            boxShadow: 'var(--shadow)'
+                          }}>
+                            <div className="search-result-item" onClick={() => openEdit(cl)} style={{ gap: 8 }}><Edit2 size={14} /> Modifica</div>
+                            <div className="search-result-item" style={{ color: 'var(--danger)', gap: 8 }}
+                              onClick={() => { setDeleteTarget(cl); setMenuOpen(null); }}><Trash2 size={14} /> Elimina</div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <Link to={`/classi/${cl.slug || cl.id}`} style={{ textDecoration: 'none', display: 'block' }}>
                     {cl.istituzione && (
                       <div style={{ fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
                         <Building2 size={13} style={{ flexShrink: 0 }} />
